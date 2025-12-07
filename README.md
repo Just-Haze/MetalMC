@@ -1,68 +1,88 @@
-# ⚡ MetalMC
+# ⚔️ MetalMC
 
-> **High-Performance Server for Minecraft 1.21.10**
+> **High-Performance Minecraft Server Software**
+>
+> _Fork of PaperMC, targeting Minecraft 1.21.10_
 
-![Build Status](https://img.shields.io/badge/build-passing-brightgreen) ![Version](https://img.shields.io/badge/version-1.21.10-blue) ![License](https://img.shields.io/badge/license-GPLv3-orange)
-
-MetalMC is a rebuilt, high-performance Minecraft server implementation designed for 1.21.10. It features a custom-built optimization engine that significantly reduces CPU usage and improves tick consistency under load.
+MetalMC is a highly optimized, multithreaded Minecraft server implementation designed to squeeze every ounce of performance out of your hardware. By parallelizing heavy tasks and optimizing core math and logic, MetalMC delivers superior TPS and stability under load.
 
 ---
 
-## 🚀 Key Features
+## ⚡ Key Features
 
-### 🧠 Smart Entity Activation
+### 🚀 Advanced Multithreading
 
-MetalMC includes a proprietary entity management system that intelligently scales AI processing based on player proximity.
+MetalMC moves heavy lifting off the main thread to keep your server running at 20 TPS.
 
--   **Dynamic Throttling:** Entities far from players automatically reduce their tick rate to save resources without affecting gameplay.
--   **Smart Logic:** Prioritizes active interactions while putting distant mobs into specific low-power states.
--   **Result:** Capable of handling significantly higher entity counts than standard implementations.
+-   **Async Chunk Loading:** Smart priority system handles chunk IO on worker threads, prioritizing players.
+-   **Async Entity Processing:** Pathfinding and collision checks run in parallel.
+-   **Async Tile Entities:** Hoppers and furnaces calculate logic asynchronously.
+-   **Dynamic Thread Priorities:** Automatically adjusts thread resources based on server load (TPS).
 
-### ❄️ Enhanced Chunk Processing
+### ❄️ Zero-Waste Ticking
 
-We have re-engineered the core chunk ticking loop to eliminate wasted cycles.
+Core game loops are re-engineered for efficiency.
 
--   **Predictive Caching:** Environmental updates (like lightning and weather) are pre-calculated to avoid expensive random number generation every tick.
--   **Zero-Waste Checks:** Redundant logic is stripped from the main loop, ensuring every CPU cycle contributes to gameplay.
+-   **Predictive Caching:** Pre-calcs environmental updates (weather, lightning) to skip expensive RNG.
+-   **Optimized Chunk Ticking:** Eliminates redundant checks in the chunk loop.
 
 ### 🔢 Metal Math Engine
 
-A custom, low-level math library built specifically for Minecraft's physics.
+A custom, low-level math library built for Minecraft physics.
 
--   **L1 Cache Optimized:** Key lookup tables are compressed to 4KB to fit entirely within CPU L1 cache, granting near-instant access for physics calculations.
--   **Integer Arithmetic:** Replaces slow floating-point operations with CPU-native integer math for maximum efficiency.
+-   **L1 Cache Optimized:** 4KB lookup tables fit in CPU cache for instant access.
+-   **Integer Arithmetic:** Replaces slow floating-point operations with CPU-native integer math.
 
 ---
 
 ## 🛠️ Configuration (`metal.yml`)
 
-MetalMC generates a `metal.yml` file for easy configuration.
+MetalMC generates a `metal.yml` file automatically on first launch.
+
+### Sample Configuration
 
 ```yaml
 optimizations:
-    # Enable enhanced chunk processing
-    chunk-ticking: true
+    chunk-ticking: true # Toggle enhanced chunk ticking
 
-    # Enable AI throttling
-    ai-throttling: true
-
-    # Smart Entity Activation Settings
-    dab:
+multithreading:
+    async-chunk-loading:
         enabled: true
-        start-distance: 12 # Start throttling at 12 blocks
-        max-tick-freq: 20 # Max throttle: 1 tick per second
-        activation-dist-mod: 8 # Throttling curve aggressiveness
+        threads: 4 # Default: CPU Cores / 2
+        prioritize-player-chunks: true
+
+    async-entity-processing:
+        enabled: true
+        threads: 2
+
+    async-tile-entities:
+        enabled: true # Hoppers & Furnaces
+
+    thread-priorities:
+        enabled: true
+        dynamic-adjustment: true # Auto-tune priorities based on TPS
 ```
-
-## 📦 Installation
-
-1. Download the latest `metalmc-1.21.10-R0.1-SNAPSHOT.jar` from the [Releases](https://github.com/Just-Haze/MetalMC/releases) page.
-2. Run it just like any server jar:
-    ```bash
-    java -jar metalmc-1.21.10-R0.1-SNAPSHOT.jar --nogui
-    ```
-3. Edit `metal.yml` to tune your performance settings.
 
 ---
 
-_MetalMC: Built for Speed._
+## 📦 Building MetalMC
+
+To build the server JAR from source:
+
+1.  **Clone the repository**
+2.  **Apply Patches:**
+    ```bash
+    ./gradlew applyPatches
+    ```
+3.  **Build JAR:**
+    ```bash
+    ./gradlew createMojmapBundlerJar
+    ```
+4.  **Find your JAR:**
+    Located in `paper-server/build/libs/`
+
+---
+
+## ⚖️ License
+
+Fork of [PaperMC](https://github.com/PaperMC/Paper). Licensed under GPLv3.

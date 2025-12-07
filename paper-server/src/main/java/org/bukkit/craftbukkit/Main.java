@@ -25,7 +25,9 @@ public class Main {
     // Paper end - Reset loggers after shutdown
 
     public static void main(String[] args) {
-        if (System.getProperty("jdk.nio.maxCachedBufferSize") == null) System.setProperty("jdk.nio.maxCachedBufferSize", "262144"); // Paper - cap per-thread NIO cache size; https://www.evanjones.ca/java-bytebuffer-leak.html
+        if (System.getProperty("jdk.nio.maxCachedBufferSize") == null)
+            System.setProperty("jdk.nio.maxCachedBufferSize", "262144"); // Paper - cap per-thread NIO cache size;
+                                                                         // https://www.evanjones.ca/java-bytebuffer-leak.html
         OptionParser parser = new OptionParser() {
             {
                 this.acceptsAll(asList("?", "help"), "Show the help");
@@ -82,7 +84,8 @@ public class Main {
                         .ofType(Integer.class)
                         .describedAs("Server size");
 
-                this.acceptsAll(asList("d", "date-format"), "Format of the date to display in the console (for log entries)")
+                this.acceptsAll(asList("d", "date-format"),
+                        "Format of the date to display in the console (for log entries)")
                         .withRequiredArg()
                         .ofType(SimpleDateFormat.class)
                         .describedAs("Log date format");
@@ -139,7 +142,8 @@ public class Main {
 
                 this.accepts("demo", "Demo mode");
 
-                this.accepts("initSettings", "Only create configuration files and then exit"); // SPIGOT-5761: Add initSettings option
+                this.accepts("initSettings", "Only create configuration files and then exit"); // SPIGOT-5761: Add
+                                                                                               // initSettings option
 
                 this.acceptsAll(asList("S", "spigot-settings"), "File for spigot settings")
                         .withRequiredArg()
@@ -147,18 +151,25 @@ public class Main {
                         .defaultsTo(new File("spigot.yml"))
                         .describedAs("Yml file");
 
+                this.acceptsAll(asList("M", "metal-settings"), "File for metal settings")
+                        .withRequiredArg()
+                        .ofType(File.class)
+                        .defaultsTo(new File("metal.yml"))
+                        .describedAs("Yml file");
+
                 this.acceptsAll(asList("paper-dir", "paper-settings-directory"), "Directory for Paper settings")
-                    .withRequiredArg()
-                    .ofType(File.class)
-                    .defaultsTo(new File(io.papermc.paper.configuration.PaperConfigurations.CONFIG_DIR))
-                    .describedAs("Config directory");
+                        .withRequiredArg()
+                        .ofType(File.class)
+                        .defaultsTo(new File(io.papermc.paper.configuration.PaperConfigurations.CONFIG_DIR))
+                        .describedAs("Config directory");
                 this.acceptsAll(asList("paper", "paper-settings"), "File for Paper settings")
                         .withRequiredArg()
                         .ofType(File.class)
                         .defaultsTo(new File("paper.yml"))
                         .describedAs("Yml file");
 
-                this.acceptsAll(asList("add-plugin", "add-extra-plugin-jar"), "Specify paths to extra plugin jars to be loaded in addition to those in the plugins folder. This argument can be specified multiple times, once for each extra plugin jar path.")
+                this.acceptsAll(asList("add-plugin", "add-extra-plugin-jar"),
+                        "Specify paths to extra plugin jars to be loaded in addition to those in the plugins folder. This argument can be specified multiple times, once for each extra plugin jar path.")
                         .withRequiredArg()
                         .ofType(File.class)
                         .defaultsTo(new File[] {})
@@ -192,7 +203,8 @@ public class Main {
             // Do you love Java using + and ! as string based identifiers? I sure do!
             String path = new File(".").getAbsolutePath();
             if (path.contains("!") || path.contains("+")) {
-                System.err.println("Cannot run server in a directory with ! or + in the pathname. Please rename the affected folders and try again.");
+                System.err.println(
+                        "Cannot run server in a directory with ! or + in the pathname. Please rename the affected folders and try again.");
                 return;
             }
 
@@ -203,41 +215,50 @@ public class Main {
             boolean isPreRelease = javaVersionName.contains("-");
             if (isPreRelease) {
                 if (!skip) {
-                    System.err.println("Unsupported Java detected (" + javaVersionName + "). You are running an unsupported, non official, version. Only general availability versions of Java are supported. Please update your Java version. See https://docs.papermc.io/paper/faq#unsupported-java-detected-what-do-i-do for more information.");
+                    System.err.println("Unsupported Java detected (" + javaVersionName
+                            + "). You are running an unsupported, non official, version. Only general availability versions of Java are supported. Please update your Java version. See https://docs.papermc.io/paper/faq#unsupported-java-detected-what-do-i-do for more information.");
                     return;
                 }
 
-                System.err.println("Unsupported Java detected ("+ javaVersionName + "), but the check was skipped. Proceed with caution! ");
+                System.err.println("Unsupported Java detected (" + javaVersionName
+                        + "), but the check was skipped. Proceed with caution! ");
             }
             // Paper end - Improve java version check
 
             try {
                 if (options.has("nojline")) {
-                    System.setProperty(net.minecrell.terminalconsole.TerminalConsoleAppender.JLINE_OVERRIDE_PROPERTY, "false");
+                    System.setProperty(net.minecrell.terminalconsole.TerminalConsoleAppender.JLINE_OVERRIDE_PROPERTY,
+                            "false");
                     useJline = false;
                 }
 
                 if (options.has("noconsole")) {
                     Main.useConsole = false;
                     useJline = false; // Paper
-                    System.setProperty(net.minecrell.terminalconsole.TerminalConsoleAppender.JLINE_OVERRIDE_PROPERTY, "false"); // Paper
+                    System.setProperty(net.minecrell.terminalconsole.TerminalConsoleAppender.JLINE_OVERRIDE_PROPERTY,
+                            "false"); // Paper
                 }
 
-                if (Main.class.getPackage().getImplementationVendor() != null && System.getProperty("IReallyKnowWhatIAmDoingISwear") == null) {
-                    Date buildDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z").parse(Main.class.getPackage().getImplementationVendor()); // Paper
+                if (Main.class.getPackage().getImplementationVendor() != null
+                        && System.getProperty("IReallyKnowWhatIAmDoingISwear") == null) {
+                    Date buildDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z")
+                            .parse(Main.class.getPackage().getImplementationVendor()); // Paper
 
                     Calendar deadline = Calendar.getInstance();
                     deadline.add(Calendar.DAY_OF_YEAR, -14);
                     if (buildDate.before(deadline.getTime())) {
                         // Paper start - This is some stupid bullshit
                         System.err.println("*** Warning, you've not updated in a while! ***");
-                        System.err.println("*** Please download a new build from https://papermc.io/downloads/paper ***");
+                        System.err
+                                .println("*** Please download a new build from https://papermc.io/downloads/paper ***");
                         // Paper end
                     }
                 }
 
-                System.setProperty("library.jansi.version", "Paper"); // Paper - set meaningless jansi version to prevent git builds from crashing on Windows
-                System.setProperty("jdk.console", "java.base"); // Paper - revert default console provider back to java.base so we can have our own jline
+                System.setProperty("library.jansi.version", "Paper"); // Paper - set meaningless jansi version to
+                                                                      // prevent git builds from crashing on Windows
+                System.setProperty("jdk.console", "java.base"); // Paper - revert default console provider back to
+                                                                // java.base so we can have our own jline
 
                 io.papermc.paper.PaperBootstrap.boot(options);
             } catch (Throwable t) {
