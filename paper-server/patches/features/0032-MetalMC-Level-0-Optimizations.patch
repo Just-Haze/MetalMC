@@ -1,0 +1,725 @@
+From 63ba6ffde54f60eda8ac2b9d95250c4145012fd4 Mon Sep 17 00:00:00 2001
+From: Just-Haze <Just-Haze@users.noreply.github.com>
+Date: Sun, 7 Dec 2025 18:36:29 +0800
+Subject: [PATCH] MetalMC Level 0 Optimizations
+
+---
+ gradle.properties                             |   5 +-
+ .../configuration/GlobalConfiguration.java    |   2 +-
+ .../configuration/WorldConfiguration.java     | 179 ++++++++++--------
+ .../java/org/spigotmc/SpigotWorldConfig.java  | 155 ++++++++++-----
+ 4 files changed, 215 insertions(+), 126 deletions(-)
+
+diff --git a/gradle.properties b/gradle.properties
+index 4dbf5fe9d..40672bd91 100644
+--- a/gradle.properties
++++ b/gradle.properties
+@@ -1,11 +1,10 @@
+-group=io.papermc.paper
+-version=1.21.10-R0.1-SNAPSHOT
++version=1.21.10-R0.1-METAL
+ mcVersion=1.21.10
+ 
+ # Set to true while updating Minecraft version
+ updatingMinecraft=false
+ 
+-org.gradle.configuration-cache=true
++org.gradle.configuration-cache=false
+ org.gradle.caching=true
+ org.gradle.parallel=true
+ org.gradle.vfs.watch=false
+diff --git a/paper-server/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java b/paper-server/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
+index a40986757..9d7ec0340 100644
+--- a/paper-server/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
++++ b/paper-server/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
+@@ -351,7 +351,7 @@ public class GlobalConfiguration extends ConfigurationPart {
+         public boolean useAlternativeLuckFormula = false;
+         public boolean useDimensionTypeForCustomSpawners = false;
+         public boolean strictAdvancementDimensionCheck = false;
+-        public IntOr.Default compressionLevel = IntOr.Default.USE_DEFAULT;
++        public IntOr.Default compressionLevel = new IntOr.Default(OptionalInt.of(6));
+         @Comment("Defines the leniency distance added on the server to the interaction range of a player when validating interact packets.")
+         public DoubleOr.Default clientInteractionLeniencyDistance = DoubleOr.Default.USE_DEFAULT;
+         @Comment("Defines how many orbs groups can exist in an area.")
+diff --git a/paper-server/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java b/paper-server/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
+index 6877056dd..98d810b9a 100644
+--- a/paper-server/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
++++ b/paper-server/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
+@@ -67,10 +67,11 @@ import org.spongepowered.configurate.objectmapping.meta.Required;
+ import org.spongepowered.configurate.objectmapping.meta.Setting;
+ import org.spongepowered.configurate.serialize.SerializationException;
+ 
+-@SuppressWarnings({"FieldCanBeLocal", "FieldMayBeFinal", "NotNullFieldNotInitialized", "InnerClassMayBeStatic"})
++@SuppressWarnings({ "FieldCanBeLocal", "FieldMayBeFinal", "NotNullFieldNotInitialized", "InnerClassMayBeStatic" })
+ public class WorldConfiguration extends ConfigurationPart {
+     private static final Logger LOGGER = LogUtils.getClassLogger();
+-    static final int CURRENT_VERSION = 31; // (when you change the version, change the comment, so it conflicts on rebases): migrate spawn loaded configs to gamerule
++    static final int CURRENT_VERSION = 31; // (when you change the version, change the comment, so it conflicts on
++                                           // rebases): migrate spawn loaded configs to gamerule
+ 
+     private final transient SpigotWorldConfig spigotConfig;
+     private final transient ResourceLocation worldKey;
+@@ -101,31 +102,31 @@ public class WorldConfiguration extends ConfigurationPart {
+             public boolean lavaObscures = false;
+             public boolean usePermission = false;
+             public List<Block> hiddenBlocks = List.of(
+-                //<editor-fold desc="Anti-Xray Hidden Blocks" defaultstate="collapsed">
+-                Blocks.COPPER_ORE,
+-                Blocks.DEEPSLATE_COPPER_ORE,
+-                Blocks.RAW_COPPER_BLOCK,
+-                Blocks.GOLD_ORE,
+-                Blocks.DEEPSLATE_GOLD_ORE,
+-                Blocks.IRON_ORE,
+-                Blocks.DEEPSLATE_IRON_ORE,
+-                Blocks.RAW_IRON_BLOCK,
+-                Blocks.COAL_ORE,
+-                Blocks.DEEPSLATE_COAL_ORE,
+-                Blocks.LAPIS_ORE,
+-                Blocks.DEEPSLATE_LAPIS_ORE,
+-                Blocks.MOSSY_COBBLESTONE,
+-                Blocks.OBSIDIAN,
+-                Blocks.CHEST,
+-                Blocks.DIAMOND_ORE,
+-                Blocks.DEEPSLATE_DIAMOND_ORE,
+-                Blocks.REDSTONE_ORE,
+-                Blocks.DEEPSLATE_REDSTONE_ORE,
+-                Blocks.CLAY,
+-                Blocks.EMERALD_ORE,
+-                Blocks.DEEPSLATE_EMERALD_ORE,
+-                Blocks.ENDER_CHEST
+-                //</editor-fold>
++                    // <editor-fold desc="Anti-Xray Hidden Blocks" defaultstate="collapsed">
++                    Blocks.COPPER_ORE,
++                    Blocks.DEEPSLATE_COPPER_ORE,
++                    Blocks.RAW_COPPER_BLOCK,
++                    Blocks.GOLD_ORE,
++                    Blocks.DEEPSLATE_GOLD_ORE,
++                    Blocks.IRON_ORE,
++                    Blocks.DEEPSLATE_IRON_ORE,
++                    Blocks.RAW_IRON_BLOCK,
++                    Blocks.COAL_ORE,
++                    Blocks.DEEPSLATE_COAL_ORE,
++                    Blocks.LAPIS_ORE,
++                    Blocks.DEEPSLATE_LAPIS_ORE,
++                    Blocks.MOSSY_COBBLESTONE,
++                    Blocks.OBSIDIAN,
++                    Blocks.CHEST,
++                    Blocks.DIAMOND_ORE,
++                    Blocks.DEEPSLATE_DIAMOND_ORE,
++                    Blocks.REDSTONE_ORE,
++                    Blocks.DEEPSLATE_REDSTONE_ORE,
++                    Blocks.CLAY,
++                    Blocks.EMERALD_ORE,
++                    Blocks.DEEPSLATE_EMERALD_ORE,
++                    Blocks.ENDER_CHEST
++            // </editor-fold>
+             );
+             public List<Block> replacementBlocks = List.of(Blocks.STONE, Blocks.OAK_PLANKS, Blocks.DEEPSLATE);
+         }
+@@ -169,35 +170,47 @@ public class WorldConfiguration extends ConfigurationPart {
+         public Spawning spawning;
+ 
+         public class Spawning extends ConfigurationPart {
+-            public ArrowDespawnRate nonPlayerArrowDespawnRate = ArrowDespawnRate.def(WorldConfiguration.this.spigotConfig);
+-            public ArrowDespawnRate creativeArrowDespawnRate = ArrowDespawnRate.def(WorldConfiguration.this.spigotConfig);
++            public ArrowDespawnRate nonPlayerArrowDespawnRate = ArrowDespawnRate
++                    .def(WorldConfiguration.this.spigotConfig);
++            public ArrowDespawnRate creativeArrowDespawnRate = ArrowDespawnRate
++                    .def(WorldConfiguration.this.spigotConfig);
+             public boolean filterBadTileEntityNbtFromFallingBlocks = true;
+-            public List<NbtPathArgument.NbtPath> filteredEntityTagNbtPaths = NbtPathSerializer.fromString(List.of("Pos", "Motion", "sleeping_pos"));
++            public List<NbtPathArgument.NbtPath> filteredEntityTagNbtPaths = NbtPathSerializer
++                    .fromString(List.of("Pos", "Motion", "sleeping_pos"));
+             public boolean disableMobSpawnerSpawnEggTransformation = false;
+             public boolean perPlayerMobSpawns = true;
+             public boolean scanForLegacyEnderDragon = true;
+             @MergeMap
+-            public Reference2IntMap<MobCategory> spawnLimits = Util.make(new Reference2IntOpenHashMap<>(NaturalSpawner.SPAWNING_CATEGORIES.length), map -> Arrays.stream(NaturalSpawner.SPAWNING_CATEGORIES).forEach(mobCategory -> map.put(mobCategory, -1)));
++            public Reference2IntMap<MobCategory> spawnLimits = Util.make(
++                    new Reference2IntOpenHashMap<>(NaturalSpawner.SPAWNING_CATEGORIES.length),
++                    map -> Arrays.stream(NaturalSpawner.SPAWNING_CATEGORIES)
++                            .forEach(mobCategory -> map.put(mobCategory, -1)));
+             @MergeMap
+-            public Map<MobCategory, DespawnRangePair> despawnRanges = Arrays.stream(MobCategory.values()).collect(Collectors.toMap(Function.identity(), category -> DespawnRangePair.createDefault()));
++            public Map<MobCategory, DespawnRangePair> despawnRanges = Arrays.stream(MobCategory.values())
++                    .collect(Collectors.toMap(Function.identity(), category -> new DespawnRangePair(
++                            new DespawnRange(new IntOr.Default(OptionalInt.of(96))),
++                            new DespawnRange(new IntOr.Default(OptionalInt.of(28))))));
+             public DespawnRange.Shape despawnRangeShape = DespawnRange.Shape.ELLIPSOID;
+             @MergeMap
+-            public Reference2IntMap<MobCategory> ticksPerSpawn = Util.make(new Reference2IntOpenHashMap<>(NaturalSpawner.SPAWNING_CATEGORIES.length), map -> Arrays.stream(NaturalSpawner.SPAWNING_CATEGORIES).forEach(mobCategory -> map.put(mobCategory, -1)));
++            public Reference2IntMap<MobCategory> ticksPerSpawn = Util.make(
++                    new Reference2IntOpenHashMap<>(NaturalSpawner.SPAWNING_CATEGORIES.length),
++                    map -> Arrays.stream(NaturalSpawner.SPAWNING_CATEGORIES)
++                            .forEach(mobCategory -> map.put(mobCategory, -1)));
+ 
+             @ConfigSerializable
+             public record DespawnRangePair(@Required DespawnRange hard, @Required DespawnRange soft) {
+                 public static DespawnRangePair createDefault() {
+                     return new DespawnRangePair(
+-                        new DespawnRange(IntOr.Default.USE_DEFAULT),
+-                        new DespawnRange(IntOr.Default.USE_DEFAULT)
+-                    );
++                            new DespawnRange(IntOr.Default.USE_DEFAULT),
++                            new DespawnRange(IntOr.Default.USE_DEFAULT));
+                 }
+             }
+ 
+-            public @ThrowExceptions Reference2ObjectMap<EntityType<?>, IntOr.Disabled> despawnTime = Util.make(new Reference2ObjectOpenHashMap<>(), map -> {
+-                map.put(EntityType.SNOWBALL, IntOr.Disabled.DISABLED);
+-                map.put(EntityType.LLAMA_SPIT, IntOr.Disabled.DISABLED);
+-            });
++            public @ThrowExceptions Reference2ObjectMap<EntityType<?>, IntOr.Disabled> despawnTime = Util
++                    .make(new Reference2ObjectOpenHashMap<>(), map -> {
++                        map.put(EntityType.SNOWBALL, IntOr.Disabled.DISABLED);
++                        map.put(EntityType.LLAMA_SPIT, IntOr.Disabled.DISABLED);
++                    });
+ 
+             @PostProcess
+             public void precomputeDespawnDistances() throws SerializationException {
+@@ -261,11 +274,18 @@ public class WorldConfiguration extends ConfigurationPart {
+                     SAFE_REGEN, DELETE, NOTHING, WARN;
+                 }
+             }
++
+             public AltItemDespawnRate altItemDespawnRate;
+ 
+             public class AltItemDespawnRate extends ConfigurationPart {
+-                public boolean enabled = false;
+-                public Reference2IntMap<Item> items = new Reference2IntOpenHashMap<>(Map.of(Items.COBBLESTONE, 300));
++                public boolean enabled = true;
++                public Reference2IntMap<Item> items = new Reference2IntOpenHashMap<>(Map.of(
++                        Items.COBBLESTONE, 300,
++                        Items.NETHERRACK, 300,
++                        Items.DIRT, 300,
++                        Items.GRAVEL, 300,
++                        Items.SAND, 300,
++                        Items.ROTTEN_FLESH, 300));
+             }
+         }
+ 
+@@ -273,7 +293,7 @@ public class WorldConfiguration extends ConfigurationPart {
+ 
+         public class Behavior extends ConfigurationPart {
+             public boolean disableChestCatDetection = false;
+-            public boolean spawnerNerfedMobsShouldJump = false;
++            public boolean spawnerNerfedMobsShouldJump = true;
+             public int experienceMergeMaxValue = -1;
+             public boolean shouldRemoveDragon = false;
+             public boolean zombiesTargetTurtleEggs = true;
+@@ -281,14 +301,18 @@ public class WorldConfiguration extends ConfigurationPart {
+             public double babyZombieMovementModifier = 0.5;
+             public boolean allowSpiderWorldBorderClimbing = true;
+ 
+-            private static final List<EntityType<?>> ZOMBIE_LIKE = List.of(EntityType.ZOMBIE, EntityType.HUSK, EntityType.ZOMBIE_VILLAGER, EntityType.ZOMBIFIED_PIGLIN);
++            private static final List<EntityType<?>> ZOMBIE_LIKE = List.of(EntityType.ZOMBIE, EntityType.HUSK,
++                    EntityType.ZOMBIE_VILLAGER, EntityType.ZOMBIFIED_PIGLIN);
+             @MergeMap
+-            public Map<EntityType<?>, List<Difficulty>> doorBreakingDifficulty = Util.make(new IdentityHashMap<>(), map -> {
+-                for (final EntityType<?> type : ZOMBIE_LIKE) {
+-                    map.put(type, Arrays.stream(Difficulty.values()).filter(Zombie.DOOR_BREAKING_PREDICATE).toList());
+-                }
+-                map.put(EntityType.VINDICATOR, Arrays.stream(Difficulty.values()).filter(Vindicator.DOOR_BREAKING_PREDICATE).toList());
+-            });
++            public Map<EntityType<?>, List<Difficulty>> doorBreakingDifficulty = Util.make(new IdentityHashMap<>(),
++                    map -> {
++                        for (final EntityType<?> type : ZOMBIE_LIKE) {
++                            map.put(type,
++                                    Arrays.stream(Difficulty.values()).filter(Zombie.DOOR_BREAKING_PREDICATE).toList());
++                        }
++                        map.put(EntityType.VINDICATOR,
++                                Arrays.stream(Difficulty.values()).filter(Vindicator.DOOR_BREAKING_PREDICATE).toList());
++                    });
+ 
+             public boolean disableCreeperLingeringEffect = false;
+             public boolean enderDragonsDeathAlwaysPlacesDragonEgg = false;
+@@ -354,7 +378,8 @@ public class WorldConfiguration extends ConfigurationPart {
+                     return display.or(def);
+                 } else if (entity instanceof Player) {
+                     return player.or(def);
+-                } else if (entity instanceof HangingEntity || entity instanceof ItemEntity || entity instanceof ExperienceOrb) {
++                } else if (entity instanceof HangingEntity || entity instanceof ItemEntity
++                        || entity instanceof ExperienceOrb) {
+                     return misc.or(def);
+                 }
+                 switch (entity.activationType) {
+@@ -410,7 +435,7 @@ public class WorldConfiguration extends ConfigurationPart {
+     public class Environment extends ConfigurationPart {
+         public boolean disableThunder = false;
+         public boolean disableIceAndSnow = false;
+-        public boolean optimizeExplosions = false;
++        public boolean optimizeExplosions = true;
+         public boolean disableExplosionKnockback = false;
+         public boolean generateFlatBedrock = false;
+         public FrostedIce frostedIce;
+@@ -428,11 +453,12 @@ public class WorldConfiguration extends ConfigurationPart {
+         }
+ 
+         public TreasureMaps treasureMaps;
++
+         public class TreasureMaps extends ConfigurationPart {
+             public boolean enabled = true;
+-            @NestedSetting({"find-already-discovered", "villager-trade"})
++            @NestedSetting({ "find-already-discovered", "villager-trade" })
+             public boolean findAlreadyDiscoveredVillager = false;
+-            @NestedSetting({"find-already-discovered", "loot-tables"})
++            @NestedSetting({ "find-already-discovered", "loot-tables" })
+             public BooleanOrDefault findAlreadyDiscoveredLootTable = BooleanOrDefault.USE_DEFAULT;
+         }
+ 
+@@ -482,8 +508,8 @@ public class WorldConfiguration extends ConfigurationPart {
+ 
+     public class Hopper extends ConfigurationPart {
+         public boolean cooldownWhenFull = true;
+-        public boolean disableMoveEvent = false;
+-        public boolean ignoreOccludingBlocks = false;
++        public boolean disableMoveEvent = true;
++        public boolean ignoreOccludingBlocks = true;
+     }
+ 
+     public Collisions collisions;
+@@ -493,7 +519,7 @@ public class WorldConfiguration extends ConfigurationPart {
+         public boolean allowVehicleCollisions = true;
+         public boolean fixClimbingBypassingCrammingRule = false;
+         @RequiresSpigotInitialization(MaxEntityCollisionsInitializer.class)
+-        public int maxEntityCollisions = 8;
++        public int maxEntityCollisions = 2;
+         public boolean allowPlayerCrammingDamage = false;
+     }
+ 
+@@ -501,19 +527,20 @@ public class WorldConfiguration extends ConfigurationPart {
+ 
+     public class Chunks extends ConfigurationPart {
+         public AutosavePeriod autoSaveInterval = AutosavePeriod.def();
+-        public int maxAutoSaveChunksPerTick = 24;
++        public int maxAutoSaveChunksPerTick = 4;
+         public int fixedChunkInhabitedTime = -1;
+-        public boolean preventMovingIntoUnloadedChunks = false;
++        public boolean preventMovingIntoUnloadedChunks = true;
+         public Duration delayChunkUnloadsBy = Duration.of("10s");
+-        public Reference2IntMap<EntityType<?>> entityPerChunkSaveLimit = Util.make(new Reference2IntOpenHashMap<>(BuiltInRegistries.ENTITY_TYPE.size()), map -> {
+-            map.defaultReturnValue(-1);
+-            map.put(EntityType.EXPERIENCE_ORB, -1);
+-            map.put(EntityType.SNOWBALL, -1);
+-            map.put(EntityType.ENDER_PEARL, -1);
+-            map.put(EntityType.ARROW, -1);
+-            map.put(EntityType.FIREBALL, -1);
+-            map.put(EntityType.SMALL_FIREBALL, -1);
+-        });
++        public Reference2IntMap<EntityType<?>> entityPerChunkSaveLimit = Util
++                .make(new Reference2IntOpenHashMap<>(BuiltInRegistries.ENTITY_TYPE.size()), map -> {
++                    map.defaultReturnValue(-1);
++                    map.put(EntityType.EXPERIENCE_ORB, -1);
++                    map.put(EntityType.SNOWBALL, -1);
++                    map.put(EntityType.ENDER_PEARL, -1);
++                    map.put(EntityType.ARROW, -1);
++                    map.put(EntityType.FIREBALL, -1);
++                    map.put(EntityType.SMALL_FIREBALL, -1);
++                });
+         public boolean flushRegionsOnSave = false;
+ 
+         @PostProcess
+@@ -532,13 +559,15 @@ public class WorldConfiguration extends ConfigurationPart {
+     public TickRates tickRates;
+ 
+     public class TickRates extends ConfigurationPart {
+-        public int grassSpread = 1;
+-        public int containerUpdate = 1;
+-        public int mobSpawner = 1;
++        public int grassSpread = 4;
++        public int containerUpdate = 3;
++        public int mobSpawner = 2;
+         public int wetFarmland = 1;
+         public int dryFarmland = 1;
+-        public Table<EntityType<?>, String, Integer> sensor = Util.make(HashBasedTable.create(), table -> table.put(EntityType.VILLAGER, "secondarypoisensor", 40));
+-        public Table<EntityType<?>, String, Integer> behavior = Util.make(HashBasedTable.create(), table -> table.put(EntityType.VILLAGER, "validatenearbypoi", -1));
++        public Table<EntityType<?>, String, Integer> sensor = Util.make(HashBasedTable.create(),
++                table -> table.put(EntityType.VILLAGER, "secondarypoisensor", 40));
++        public Table<EntityType<?>, String, Integer> behavior = Util.make(HashBasedTable.create(),
++                table -> table.put(EntityType.VILLAGER, "validatenearbypoi", -1));
+     }
+ 
+     @Setting(FeatureSeedsGeneration.FEATURE_SEEDS_KEY)
+@@ -569,7 +598,7 @@ public class WorldConfiguration extends ConfigurationPart {
+     public class Misc extends ConfigurationPart {
+         public boolean updatePathfindingOnBlockUpdate = true;
+         public boolean showSignClickCommandFailureMsgsToPlayer = false;
+-        public RedstoneImplementation redstoneImplementation = RedstoneImplementation.VANILLA;
++        public RedstoneImplementation redstoneImplementation = RedstoneImplementation.ALTERNATE_CURRENT;
+         public AlternateCurrentUpdateOrder alternateCurrentUpdateOrder = AlternateCurrentUpdateOrder.HORIZONTAL_FIRST_OUTWARD;
+         public boolean disableEndCredits = false;
+         public DoubleOr.Default maxLeashDistance = DoubleOr.Default.USE_DEFAULT;
+@@ -583,7 +612,7 @@ public class WorldConfiguration extends ConfigurationPart {
+         }
+ 
+         public enum AlternateCurrentUpdateOrder {
+-        	HORIZONTAL_FIRST_OUTWARD, HORIZONTAL_FIRST_INWARD, VERTICAL_FIRST_OUTWARD, VERTICAL_FIRST_INWARD
++            HORIZONTAL_FIRST_OUTWARD, HORIZONTAL_FIRST_INWARD, VERTICAL_FIRST_OUTWARD, VERTICAL_FIRST_INWARD
+         }
+     }
+ }
+diff --git a/paper-server/src/main/java/org/spigotmc/SpigotWorldConfig.java b/paper-server/src/main/java/org/spigotmc/SpigotWorldConfig.java
+index 43c6240ec..878847bf5 100644
+--- a/paper-server/src/main/java/org/spigotmc/SpigotWorldConfig.java
++++ b/paper-server/src/main/java/org/spigotmc/SpigotWorldConfig.java
+@@ -35,12 +35,14 @@ public class SpigotWorldConfig {
+ 
+     public boolean getBoolean(String path, boolean def) {
+         this.config.addDefault("world-settings.default." + path, def);
+-        return this.config.getBoolean("world-settings." + this.worldName + "." + path, this.config.getBoolean("world-settings.default." + path));
++        return this.config.getBoolean("world-settings." + this.worldName + "." + path,
++                this.config.getBoolean("world-settings.default." + path));
+     }
+ 
+     public double getDouble(String path, double def) {
+         this.config.addDefault("world-settings.default." + path, def);
+-        return this.config.getDouble("world-settings." + this.worldName + "." + path, this.config.getDouble("world-settings.default." + path));
++        return this.config.getDouble("world-settings." + this.worldName + "." + path,
++                this.config.getDouble("world-settings.default." + path));
+     }
+ 
+     public int getInt(String path) {
+@@ -53,24 +55,29 @@ public class SpigotWorldConfig {
+     }
+ 
+     public int getInt(String path, int def, boolean setDef) {
+-        if (setDef) this.config.addDefault("world-settings.default." + path, def);
+-        return this.config.getInt("world-settings." + this.worldName + "." + path, this.config.getInt("world-settings.default." + path, def));
++        if (setDef)
++            this.config.addDefault("world-settings.default." + path, def);
++        return this.config.getInt("world-settings." + this.worldName + "." + path,
++                this.config.getInt("world-settings.default." + path, def));
+         // Paper end
+     }
+ 
+     public <T> List getList(String path, T def) {
+         this.config.addDefault("world-settings.default." + path, def);
+-        return (List<T>) this.config.getList("world-settings." + this.worldName + "." + path, this.config.getList("world-settings.default." + path));
++        return (List<T>) this.config.getList("world-settings." + this.worldName + "." + path,
++                this.config.getList("world-settings.default." + path));
+     }
+ 
+     public String getString(String path, String def) {
+         this.config.addDefault("world-settings.default." + path, def);
+-        return this.config.getString("world-settings." + this.worldName + "." + path, this.config.getString("world-settings.default." + path));
++        return this.config.getString("world-settings." + this.worldName + "." + path,
++                this.config.getString("world-settings.default." + path));
+     }
+ 
+     private Object get(String path, Object def) {
+         this.config.addDefault("world-settings.default." + path, def);
+-        return this.config.get("world-settings." + this.worldName + "." + path, this.config.get("world-settings.default." + path));
++        return this.config.get("world-settings." + this.worldName + "." + path,
++                this.config.get("world-settings.default." + path));
+     }
+ 
+     // Crop growth rates
+@@ -134,18 +141,21 @@ public class SpigotWorldConfig {
+     }
+ 
+     public double itemMerge;
++
+     private void itemMerge() {
+         this.itemMerge = this.getDouble("merge-radius.item", 0.5);
+         this.log("Item Merge Radius: " + this.itemMerge);
+     }
+ 
+     public double expMerge;
++
+     private void expMerge() {
+         this.expMerge = this.getDouble("merge-radius.exp", -1);
+         this.log("Experience Merge Radius: " + this.expMerge);
+     }
+ 
+     public int viewDistance;
++
+     private void viewDistance() {
+         if (SpigotConfig.version < 12) {
+             this.set("view-distance", null);
+@@ -162,9 +172,12 @@ public class SpigotWorldConfig {
+     }
+ 
+     public int simulationDistance;
++
+     private void simulationDistance() {
+         Object simulationDistanceObject = this.get("simulation-distance", "default");
+-        this.simulationDistance = (simulationDistanceObject) instanceof Number ? ((Number) simulationDistanceObject).intValue() : -1;
++        this.simulationDistance = (simulationDistanceObject) instanceof Number
++                ? ((Number) simulationDistanceObject).intValue()
++                : -1;
+         if (this.simulationDistance <= 0) {
+             this.simulationDistance = Bukkit.getSimulationDistance();
+         }
+@@ -173,21 +186,23 @@ public class SpigotWorldConfig {
+     }
+ 
+     public byte mobSpawnRange;
++
+     private void mobSpawnRange() {
+-        this.mobSpawnRange = (byte) getInt("mob-spawn-range", 8); // Paper - Vanilla
++        this.mobSpawnRange = (byte) getInt("mob-spawn-range", 4); // Paper - Vanilla
+         this.log("Mob Spawn Range: " + this.mobSpawnRange);
+     }
+ 
+     public int itemDespawnRate;
++
+     private void itemDespawnRate() {
+         this.itemDespawnRate = this.getInt("item-despawn-rate", 6000);
+         this.log("Item Despawn Rate: " + this.itemDespawnRate);
+     }
+ 
+-    public int animalActivationRange = 32;
+-    public int monsterActivationRange = 32;
+-    public int raiderActivationRange = 64;
+-    public int miscActivationRange = 16;
++    public int animalActivationRange = 16;
++    public int monsterActivationRange = 24;
++    public int raiderActivationRange = 48;
++    public int miscActivationRange = 8;
+     public int flyingMonsterActivationRange = 32;
+     public int waterActivationRange = 16;
+     public int villagerActivationRange = 32;
+@@ -210,37 +225,59 @@ public class SpigotWorldConfig {
+     public boolean ignoreSpectatorActivation = false;
+ 
+     private void activationRange() {
+-        boolean hasAnimalsConfig = config.getInt("entity-activation-range.animals", this.animalActivationRange) != this.animalActivationRange; // Paper
++        boolean hasAnimalsConfig = config.getInt("entity-activation-range.animals",
++                this.animalActivationRange) != this.animalActivationRange; // Paper
+         this.animalActivationRange = this.getInt("entity-activation-range.animals", this.animalActivationRange);
+         this.monsterActivationRange = this.getInt("entity-activation-range.monsters", this.monsterActivationRange);
+         this.raiderActivationRange = this.getInt("entity-activation-range.raiders", this.raiderActivationRange);
+         this.miscActivationRange = this.getInt("entity-activation-range.misc", this.miscActivationRange);
+         this.waterActivationRange = this.getInt("entity-activation-range.water", this.waterActivationRange);
+-        this.villagerActivationRange = this.getInt("entity-activation-range.villagers", hasAnimalsConfig ? this.animalActivationRange : this.villagerActivationRange);
+-        this.flyingMonsterActivationRange = this.getInt("entity-activation-range.flying-monsters", this.flyingMonsterActivationRange);
+-
+-        this.wakeUpInactiveAnimals = this.getInt("entity-activation-range.wake-up-inactive.animals-max-per-tick", this.wakeUpInactiveAnimals);
+-        this.wakeUpInactiveAnimalsEvery = this.getInt("entity-activation-range.wake-up-inactive.animals-every", this.wakeUpInactiveAnimalsEvery);
+-        this.wakeUpInactiveAnimalsFor = this.getInt("entity-activation-range.wake-up-inactive.animals-for", this.wakeUpInactiveAnimalsFor);
+-
+-        this.wakeUpInactiveMonsters = this.getInt("entity-activation-range.wake-up-inactive.monsters-max-per-tick", this.wakeUpInactiveMonsters);
+-        this.wakeUpInactiveMonstersEvery = this.getInt("entity-activation-range.wake-up-inactive.monsters-every", this.wakeUpInactiveMonstersEvery);
+-        this.wakeUpInactiveMonstersFor = this.getInt("entity-activation-range.wake-up-inactive.monsters-for", this.wakeUpInactiveMonstersFor);
+-
+-        this.wakeUpInactiveVillagers = this.getInt("entity-activation-range.wake-up-inactive.villagers-max-per-tick", this.wakeUpInactiveVillagers);
+-        this.wakeUpInactiveVillagersEvery = this.getInt("entity-activation-range.wake-up-inactive.villagers-every", this.wakeUpInactiveVillagersEvery);
+-        this.wakeUpInactiveVillagersFor = this.getInt("entity-activation-range.wake-up-inactive.villagers-for", this.wakeUpInactiveVillagersFor);
+-
+-        this.wakeUpInactiveFlying = this.getInt("entity-activation-range.wake-up-inactive.flying-monsters-max-per-tick", this.wakeUpInactiveFlying);
+-        this.wakeUpInactiveFlyingEvery = this.getInt("entity-activation-range.wake-up-inactive.flying-monsters-every", this.wakeUpInactiveFlyingEvery);
+-        this.wakeUpInactiveFlyingFor = this.getInt("entity-activation-range.wake-up-inactive.flying-monsters-for", this.wakeUpInactiveFlyingFor);
+-
+-        this.villagersWorkImmunityAfter = this.getInt("entity-activation-range.villagers-work-immunity-after", this.villagersWorkImmunityAfter);
+-        this.villagersWorkImmunityFor = this.getInt("entity-activation-range.villagers-work-immunity-for", this.villagersWorkImmunityFor);
+-        this.villagersActiveForPanic = this.getBoolean("entity-activation-range.villagers-active-for-panic", this.villagersActiveForPanic);
+-        this.tickInactiveVillagers = this.getBoolean("entity-activation-range.tick-inactive-villagers", this.tickInactiveVillagers);
+-        this.ignoreSpectatorActivation = this.getBoolean("entity-activation-range.ignore-spectators", this.ignoreSpectatorActivation);
+-        this.log("Entity Activation Range: An " + this.animalActivationRange + " / Mo " + this.monsterActivationRange + " / Ra " + this.raiderActivationRange + " / Mi " + this.miscActivationRange + " / Tiv " + this.tickInactiveVillagers + " / Isa " + this.ignoreSpectatorActivation);
++        this.villagerActivationRange = this.getInt("entity-activation-range.villagers",
++                hasAnimalsConfig ? this.animalActivationRange : this.villagerActivationRange);
++        this.flyingMonsterActivationRange = this.getInt("entity-activation-range.flying-monsters",
++                this.flyingMonsterActivationRange);
++
++        this.wakeUpInactiveAnimals = this.getInt("entity-activation-range.wake-up-inactive.animals-max-per-tick",
++                this.wakeUpInactiveAnimals);
++        this.wakeUpInactiveAnimalsEvery = this.getInt("entity-activation-range.wake-up-inactive.animals-every",
++                this.wakeUpInactiveAnimalsEvery);
++        this.wakeUpInactiveAnimalsFor = this.getInt("entity-activation-range.wake-up-inactive.animals-for",
++                this.wakeUpInactiveAnimalsFor);
++
++        this.wakeUpInactiveMonsters = this.getInt("entity-activation-range.wake-up-inactive.monsters-max-per-tick",
++                this.wakeUpInactiveMonsters);
++        this.wakeUpInactiveMonstersEvery = this.getInt("entity-activation-range.wake-up-inactive.monsters-every",
++                this.wakeUpInactiveMonstersEvery);
++        this.wakeUpInactiveMonstersFor = this.getInt("entity-activation-range.wake-up-inactive.monsters-for",
++                this.wakeUpInactiveMonstersFor);
++
++        this.wakeUpInactiveVillagers = this.getInt("entity-activation-range.wake-up-inactive.villagers-max-per-tick",
++                this.wakeUpInactiveVillagers);
++        this.wakeUpInactiveVillagersEvery = this.getInt("entity-activation-range.wake-up-inactive.villagers-every",
++                this.wakeUpInactiveVillagersEvery);
++        this.wakeUpInactiveVillagersFor = this.getInt("entity-activation-range.wake-up-inactive.villagers-for",
++                this.wakeUpInactiveVillagersFor);
++
++        this.wakeUpInactiveFlying = this.getInt("entity-activation-range.wake-up-inactive.flying-monsters-max-per-tick",
++                this.wakeUpInactiveFlying);
++        this.wakeUpInactiveFlyingEvery = this.getInt("entity-activation-range.wake-up-inactive.flying-monsters-every",
++                this.wakeUpInactiveFlyingEvery);
++        this.wakeUpInactiveFlyingFor = this.getInt("entity-activation-range.wake-up-inactive.flying-monsters-for",
++                this.wakeUpInactiveFlyingFor);
++
++        this.villagersWorkImmunityAfter = this.getInt("entity-activation-range.villagers-work-immunity-after",
++                this.villagersWorkImmunityAfter);
++        this.villagersWorkImmunityFor = this.getInt("entity-activation-range.villagers-work-immunity-for",
++                this.villagersWorkImmunityFor);
++        this.villagersActiveForPanic = this.getBoolean("entity-activation-range.villagers-active-for-panic",
++                this.villagersActiveForPanic);
++        this.tickInactiveVillagers = this.getBoolean("entity-activation-range.tick-inactive-villagers",
++                this.tickInactiveVillagers);
++        this.ignoreSpectatorActivation = this.getBoolean("entity-activation-range.ignore-spectators",
++                this.ignoreSpectatorActivation);
++        this.log("Entity Activation Range: An " + this.animalActivationRange + " / Mo " + this.monsterActivationRange
++                + " / Ra " + this.raiderActivationRange + " / Mi " + this.miscActivationRange + " / Tiv "
++                + this.tickInactiveVillagers + " / Isa " + this.ignoreSpectatorActivation);
+     }
+ 
+     public int playerTrackingRange = 128;
+@@ -249,6 +286,7 @@ public class SpigotWorldConfig {
+     public int miscTrackingRange = 96;
+     public int displayTrackingRange = 128;
+     public int otherTrackingRange = 64;
++
+     private void trackingRange() {
+         this.playerTrackingRange = this.getInt("entity-tracking-range.players", this.playerTrackingRange);
+         this.animalTrackingRange = this.getInt("entity-tracking-range.animals", this.animalTrackingRange);
+@@ -256,27 +294,32 @@ public class SpigotWorldConfig {
+         this.miscTrackingRange = this.getInt("entity-tracking-range.misc", this.miscTrackingRange);
+         this.displayTrackingRange = this.getInt("entity-tracking-range.display", this.displayTrackingRange);
+         this.otherTrackingRange = this.getInt("entity-tracking-range.other", this.otherTrackingRange);
+-        this.log("Entity Tracking Range: Pl " + this.playerTrackingRange + " / An " + this.animalTrackingRange + " / Mo " + this.monsterTrackingRange + " / Mi " + this.miscTrackingRange + " / Di " + this.displayTrackingRange + " / Other " + this.otherTrackingRange);
++        this.log("Entity Tracking Range: Pl " + this.playerTrackingRange + " / An " + this.animalTrackingRange
++                + " / Mo " + this.monsterTrackingRange + " / Mi " + this.miscTrackingRange + " / Di "
++                + this.displayTrackingRange + " / Other " + this.otherTrackingRange);
+     }
+ 
+     public int hopperTransfer;
+     public int hopperCheck;
+     public int hopperAmount;
+     public boolean hopperCanLoadChunks;
++
+     private void hoppers() {
+         // Set the tick delay between hopper item movements
+-        this.hopperTransfer = this.getInt("ticks-per.hopper-transfer", 8);
++        this.hopperTransfer = this.getInt("ticks-per.hopper-transfer", 24);
+         if (SpigotConfig.version < 11) {
+-            this.set("ticks-per.hopper-check", 1);
++            this.set("ticks-per.hopper-check", 24);
+         }
+-        this.hopperCheck = this.getInt("ticks-per.hopper-check", 1);
++        this.hopperCheck = this.getInt("ticks-per.hopper-check", 24);
+         this.hopperAmount = this.getInt("hopper-amount", 1);
+         this.hopperCanLoadChunks = this.getBoolean("hopper-can-load-chunks", false);
+-        this.log("Hopper Transfer: " + this.hopperTransfer + " Hopper Check: " + this.hopperCheck + " Hopper Amount: " + this.hopperAmount + " Hopper Can Load Chunks: " + this.hopperCanLoadChunks);
++        this.log("Hopper Transfer: " + this.hopperTransfer + " Hopper Check: " + this.hopperCheck + " Hopper Amount: "
++                + this.hopperAmount + " Hopper Can Load Chunks: " + this.hopperCanLoadChunks);
+     }
+ 
+     public int arrowDespawnRate;
+     public int tridentDespawnRate;
++
+     private void arrowDespawnRate() {
+         this.arrowDespawnRate = this.getInt("arrow-despawn-rate", 1200);
+         this.tridentDespawnRate = this.getInt("trident-despawn-rate", this.arrowDespawnRate);
+@@ -284,34 +327,40 @@ public class SpigotWorldConfig {
+     }
+ 
+     public boolean zombieAggressiveTowardsVillager;
++
+     private void zombieAggressiveTowardsVillager() {
+         this.zombieAggressiveTowardsVillager = this.getBoolean("zombie-aggressive-towards-villager", true);
+         this.log("Zombie Aggressive Towards Villager: " + this.zombieAggressiveTowardsVillager);
+     }
+ 
+     public boolean nerfSpawnerMobs;
++
+     private void nerfSpawnerMobs() {
+         this.nerfSpawnerMobs = this.getBoolean("nerf-spawner-mobs", false);
+         this.log("Nerfing mobs spawned from spawners: " + this.nerfSpawnerMobs);
+     }
+ 
+     public boolean enableZombiePigmenPortalSpawns;
++
+     private void enableZombiePigmenPortalSpawns() {
+         this.enableZombiePigmenPortalSpawns = this.getBoolean("enable-zombie-pigmen-portal-spawns", true);
+         this.log("Allow Zombie Pigmen to spawn from portal blocks: " + this.enableZombiePigmenPortalSpawns);
+     }
+ 
+     public int dragonDeathSoundRadius;
++
+     private void keepDragonDeathPerWorld() {
+         this.dragonDeathSoundRadius = this.getInt("dragon-death-sound-radius", 0);
+     }
+ 
+     public int witherSpawnSoundRadius;
++
+     private void witherSpawnSoundRadius() {
+         this.witherSpawnSoundRadius = this.getInt("wither-spawn-sound-radius", 0);
+     }
+ 
+     public int endPortalSoundRadius;
++
+     private void endPortalSoundRadius() {
+         this.endPortalSoundRadius = this.getInt("end-portal-sound-radius", 0);
+     }
+@@ -365,8 +414,12 @@ public class SpigotWorldConfig {
+         this.buriedTreasureSeed = this.getInt("seed-buriedtreasure", 10387320); // StructurePlacement#HIGHLY_ARBITRARY_RANDOM_SALT
+         this.mineshaftSeed = this.getSeed("seed-mineshaft", Integer::parseInt);
+         this.strongholdSeed = this.getSeed("seed-stronghold", Long::parseLong);
+-        this.log("Custom Map Seeds:  Village: " + this.villageSeed + " Desert: " + this.desertSeed + " Igloo: " + this.iglooSeed + " Jungle: " + this.jungleSeed + " Swamp: " + this.swampSeed + " Monument: " + this.monumentSeed
+-            + " Ocean: " + this.oceanSeed + " Shipwreck: " + this.shipwreckSeed + " End City: " + this.endCitySeed + " Slime: " + this.slimeSeed + " Nether: " + this.netherSeed + " Mansion: " + this.mansionSeed + " Fossil: " + this.fossilSeed + " Portal: " + this.portalSeed);
++        this.log("Custom Map Seeds:  Village: " + this.villageSeed + " Desert: " + this.desertSeed + " Igloo: "
++                + this.iglooSeed + " Jungle: " + this.jungleSeed + " Swamp: " + this.swampSeed + " Monument: "
++                + this.monumentSeed
++                + " Ocean: " + this.oceanSeed + " Shipwreck: " + this.shipwreckSeed + " End City: " + this.endCitySeed
++                + " Slime: " + this.slimeSeed + " Nether: " + this.netherSeed + " Mansion: " + this.mansionSeed
++                + " Fossil: " + this.fossilSeed + " Portal: " + this.portalSeed);
+     }
+ 
+     public float jumpWalkExhaustion;
+@@ -376,6 +429,7 @@ public class SpigotWorldConfig {
+     public float swimMultiplier;
+     public float sprintMultiplier;
+     public float otherMultiplier;
++
+     private void initHunger() {
+         if (SpigotConfig.version < 10) {
+             this.set("hunger.walk-exhaustion", null);
+@@ -395,6 +449,7 @@ public class SpigotWorldConfig {
+ 
+     public int currentPrimedTnt = 0;
+     public int maxTntTicksPerTick;
++
+     private void maxTntPerTick() {
+         if (SpigotConfig.version < 7) {
+             this.set("max-tnt-per-tick", 100);
+@@ -404,29 +459,35 @@ public class SpigotWorldConfig {
+     }
+ 
+     public int hangingTickFrequency;
++
+     private void hangingTickFrequency() {
+         this.hangingTickFrequency = this.getInt("hanging-tick-frequency", 100);
+     }
+ 
+     public int tileMaxTickTime;
+     public int entityMaxTickTime;
++
+     private void maxTickTimes() {
+         this.tileMaxTickTime = this.getInt("max-tick-time.tile", 50);
+         this.entityMaxTickTime = this.getInt("max-tick-time.entity", 50);
+-        this.log("Tile Max Tick Time: " + this.tileMaxTickTime + "ms Entity max Tick Time: " + this.entityMaxTickTime + "ms");
++        this.log("Tile Max Tick Time: " + this.tileMaxTickTime + "ms Entity max Tick Time: " + this.entityMaxTickTime
++                + "ms");
+     }
+ 
+     public int thunderChance;
++
+     private void thunderChance() {
+         this.thunderChance = this.getInt("thunder-chance", 100000);
+     }
+ 
+     public boolean belowZeroGenerationInExistingChunks;
++
+     private void belowZeroGenerationInExistingChunks() {
+         this.belowZeroGenerationInExistingChunks = this.getBoolean("below-zero-generation-in-existing-chunks", true);
+     }
+ 
+     public boolean unloadFrozenChunks;
++
+     private void unloadFrozenChunks() {
+         this.unloadFrozenChunks = this.getBoolean("unload-frozen-chunks", false);
+     }
+-- 
+2.52.0.windows.1
+
