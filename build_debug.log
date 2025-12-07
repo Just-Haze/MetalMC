@@ -1,0 +1,54 @@
+
+> Configure project :paper-server
+paperweight-core v2.0.0-beta.19 (running on 'Windows 11')
+
+> Task :paper-api:compileJava UP-TO-DATE
+> Task :paper-api:processResources NO-SOURCE
+> Task :paper-api:classes UP-TO-DATE
+> Task :paper-api:generateApiVersioningFile UP-TO-DATE
+> Task :paper-api:jar UP-TO-DATE
+> Task :paper-server:downloadMcManifest
+> Task :paper-server:compileLog4jPluginsJava UP-TO-DATE
+> Task :paper-server:downloadMcVersionManifest UP-TO-DATE
+> Task :paper-server:downloadServerJar UP-TO-DATE
+> Task :paper-server:extractFromBundler UP-TO-DATE
+> Task :paper-server:processLog4jPluginsResources NO-SOURCE
+> Task :paper-server:log4jPluginsClasses UP-TO-DATE
+> Task :paper-server:compileJava UP-TO-DATE
+> Task :paper-server:processResources UP-TO-DATE
+> Task :paper-server:classes UP-TO-DATE
+> Task :paper-server:jar UP-TO-DATE
+> Task :paper-server:downloadMappings UP-TO-DATE
+> Task :paper-server:filterVanillaJar UP-TO-DATE
+> Task :paper-server:generateMappings UP-TO-DATE
+> Task :paper-server:cloneSpigotBuildData UP-TO-DATE
+> Task :paper-server:unpackSpigotBuildData UP-TO-DATE
+> Task :paper-server:generateSpigotMappings UP-TO-DATE
+> Task :paper-server:spigotRemapJar UP-TO-DATE
+> Task :paper-server:cleanupMappings UP-TO-DATE
+> Task :paper-server:patchMappings UP-TO-DATE
+> Task :paper-server:generateReobfMappings UP-TO-DATE
+> Task :paper-server:patchReobfMappings UP-TO-DATE
+> Task :paper-server:generateRelocatedReobfMappings UP-TO-DATE
+> Task :paper-server:fixJarForReobf UP-TO-DATE
+> Task :paper-server:includeMappings UP-TO-DATE
+> Task :paper-server:relocateConstants UP-TO-DATE
+> Task :paper-server:reobfJar FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':paper-server:reobfJar'.
+> io.papermc.paperweight.PaperweightException: Reobfuscated server jars are no longer supported and only exist for debugging purposes.
+  If you are attempting to build a paperclip or bundler jar, use the 'mojmap' variant instead of 'reobf'.
+  Enable paperweight debug mode to bypass this error.
+
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 3s
+27 actionable tasks: 2 executed, 25 up-to-date
