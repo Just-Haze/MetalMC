@@ -237,6 +237,7 @@ tasks.check {
 
 // Use TCA for console improvements
 tasks.jar {
+    archiveFileName.set("metalmc-${project.version}.jar")
     val archiveOperations = services.archiveOperations
     from(alsoShade.elements.map {
         it.map { f ->

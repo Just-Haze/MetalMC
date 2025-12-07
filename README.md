@@ -56,10 +56,10 @@ optimizations:
 
 ## 📦 Installation
 
-1. Download the latest `paper-bundler-1.21.10-R0.1-SNAPSHOT-mojmap.jar`.
+1. Download the latest `metalmc-1.21.10-R0.1-SNAPSHOT.jar` from the [Releases](https://github.com/Just-Haze/MetalMC/releases) page.
 2. Run it just like any server jar:
     ```bash
-    java -jar paper-bundler-1.21.10-R0.1-SNAPSHOT-mojmap.jar --nogui
+    java -jar metalmc-1.21.10-R0.1-SNAPSHOT.jar --nogui
     ```
 3. Edit `metal.yml` to tune your performance settings.
 
