@@ -350,6 +350,17 @@ tasks.registerRunTask("runPaperclip") {
     classpath(tasks.createMojmapPaperclipJar.flatMap { it.outputZip })
     mainClass.set(null as String?)
 }
+
+// Rename paperclip JAR to metalmc naming
+tasks.register<Copy>("renamePaperclipJar") {
+    dependsOn(tasks.createMojmapPaperclipJar)
+    from(layout.buildDirectory.file("libs/paper-paperclip-${project.version}-mojmap.jar"))
+    into(layout.buildDirectory.dir("libs"))
+    rename { "metalmc-${project.version}.jar" }
+}
+tasks.assemble {
+    dependsOn("renamePaperclipJar")
+}
 tasks.registerRunTask("runReobfPaperclip") {
     description = "Spin up a test server from the reobf Paperclip jar"
     classpath(tasks.createReobfPaperclipJar.flatMap { it.outputZip })
