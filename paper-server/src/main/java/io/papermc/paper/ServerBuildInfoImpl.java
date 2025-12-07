@@ -14,15 +14,14 @@ import org.bukkit.craftbukkit.Main;
 import org.jetbrains.annotations.NotNull;
 
 public record ServerBuildInfoImpl(
-    Key brandId,
-    String brandName,
-    String minecraftVersionId,
-    String minecraftVersionName,
-    OptionalInt buildNumber,
-    Instant buildTime,
-    Optional<String> gitBranch,
-    Optional<String> gitCommit
-) implements ServerBuildInfo {
+        Key brandId,
+        String brandName,
+        String minecraftVersionId,
+        String minecraftVersionName,
+        OptionalInt buildNumber,
+        Instant buildTime,
+        Optional<String> gitBranch,
+        Optional<String> gitCommit) implements ServerBuildInfo {
     private static final String ATTRIBUTE_BRAND_ID = "Brand-Id";
     private static final String ATTRIBUTE_BRAND_NAME = "Brand-Name";
     private static final String ATTRIBUTE_BUILD_TIME = "Build-Time";
@@ -30,7 +29,7 @@ public record ServerBuildInfoImpl(
     private static final String ATTRIBUTE_GIT_BRANCH = "Git-Branch";
     private static final String ATTRIBUTE_GIT_COMMIT = "Git-Commit";
 
-    private static final String BRAND_PAPER_NAME = "Paper";
+    private static final String BRAND_PAPER_NAME = "Metal";
 
     private static final String BUILD_DEV = "DEV";
 
@@ -40,23 +39,22 @@ public record ServerBuildInfoImpl(
 
     private ServerBuildInfoImpl(final Manifest manifest) {
         this(
-            getManifestAttribute(manifest, ATTRIBUTE_BRAND_ID)
-                .map(Key::key)
-                .orElse(BRAND_PAPER_ID),
-            getManifestAttribute(manifest, ATTRIBUTE_BRAND_NAME)
-                .orElse(BRAND_PAPER_NAME),
-            SharedConstants.getCurrentVersion().id(),
-            SharedConstants.getCurrentVersion().name(),
-            getManifestAttribute(manifest, ATTRIBUTE_BUILD_NUMBER)
-                .map(Integer::parseInt)
-                .map(OptionalInt::of)
-                .orElse(OptionalInt.empty()),
-            getManifestAttribute(manifest, ATTRIBUTE_BUILD_TIME)
-                .map(Instant::parse)
-                .orElse(Main.BOOT_TIME),
-            getManifestAttribute(manifest, ATTRIBUTE_GIT_BRANCH),
-            getManifestAttribute(manifest, ATTRIBUTE_GIT_COMMIT)
-        );
+                getManifestAttribute(manifest, ATTRIBUTE_BRAND_ID)
+                        .map(Key::key)
+                        .orElse(BRAND_PAPER_ID),
+                getManifestAttribute(manifest, ATTRIBUTE_BRAND_NAME)
+                        .orElse(BRAND_PAPER_NAME),
+                SharedConstants.getCurrentVersion().id(),
+                SharedConstants.getCurrentVersion().name(),
+                getManifestAttribute(manifest, ATTRIBUTE_BUILD_NUMBER)
+                        .map(Integer::parseInt)
+                        .map(OptionalInt::of)
+                        .orElse(OptionalInt.empty()),
+                getManifestAttribute(manifest, ATTRIBUTE_BUILD_TIME)
+                        .map(Instant::parse)
+                        .orElse(Main.BOOT_TIME),
+                getManifestAttribute(manifest, ATTRIBUTE_GIT_BRANCH),
+                getManifestAttribute(manifest, ATTRIBUTE_GIT_COMMIT));
     }
 
     @Override

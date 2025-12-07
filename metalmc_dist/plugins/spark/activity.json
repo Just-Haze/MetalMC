@@ -1,0 +1,28 @@
+[
+  {
+    "user": {
+      "type": "player",
+      "name": "Hazedf",
+      "uniqueId": "6bfa97a8-3023-44da-af72-6d40abfffd46"
+    },
+    "time": 1764346468520,
+    "type": "Profiler (live)",
+    "data": {
+      "type": "url",
+      "value": "https://spark.lucko.me/1qKggxXJ7E"
+    }
+  },
+  {
+    "user": {
+      "type": "player",
+      "name": "Hazedf",
+      "uniqueId": "6bfa97a8-3023-44da-af72-6d40abfffd46"
+    },
+    "time": 1764343954735,
+    "type": "Profiler (live)",
+    "data": {
+      "type": "url",
+      "value": "https://spark.lucko.me/wRo8ftmecK"
+    }
+  }
+]
