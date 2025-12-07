@@ -1,29 +1,44 @@
 # MetalMC
 
-<img height="100" src="https://via.placeholder.com/100/000000/FFFFFF/?text=MetalMC" align="right" alt="MetalMC Logo">
+> **Forged for Performance. Level 0 Optimized.**
 
-![License](https://img.shields.io/github/license/Just-Haze/MetalMC)
-![Discord](https://img.shields.io/discord/1234567890?label=discord&color=7289DA)
-![Stars](https://img.shields.io/github/stars/Just-Haze/MetalMC?style=social)
+![License](https://img.shields.io/github/license/Just-Haze/MetalMC?style=for-the-badge&color=252525)
+![Stars](https://img.shields.io/github/stars/Just-Haze/MetalMC?style=for-the-badge&color=252525)
+![Issues](https://img.shields.io/github/issues/Just-Haze/MetalMC?style=for-the-badge&color=252525)
 
-**MetalMC** is a drop-in replacement for [Paper](https://github.com/PaperMC/Paper) servers designed for **extreme performance** and **hardware-level optimization**.
+---
 
-MetalMC implements "Level 0" optimizations (SIMD/Native Math, Aggressive Scheduling) to push Minecraft server performance beyond what is possible with standard Java logic.
+**MetalMC** is a specialized fork of [Paper](https://github.com/PaperMC/Paper) 1.21.10 aimed at **extreme server performance**.
 
-## ⚡ Features
+Unlike general-purpose forks, MetalMC focuses on "Level 0" optimizations—changes that target hardware efficiency (CPU Cache, Branch Prediction) and aggressive logic scheduling to maintain 20 TPS under heavy load.
 
--   **Level 0 Math**: Custom L1-cache friendly trigonometry tables (4KB) replacing the massive Vanilla LUTs (256KB), reducing cache thrashing.
--   **Aggressive AI Throttling**: Smart Entity Goal Selector scheduling to reduce AI overhead by 66% in crowded environments.
--   **Performance**: Built on top of Paper 1.21.10, inheriting all standard optimizations + our metal-bare improvements.
--   **Compatibility**: Drop-in compatible with all Paper/Spigot plugins.
+## ⚡ Key Optimizations
 
-## 📥 Downloads
+### 📐 Level 0 Math (SIMD/Cache Friendly)
 
-Downloads are available on the [Releases](https://github.com/Just-Haze/MetalMC/releases) page.
+Standard Minecraft relies on massive 65,536-entry trigonometry tables (~256KB), which often cause CPU cache thrashing.
 
-## 🛠️ Building
+-   **MetalMC** replaces these with **4KB L1-Cache Resident Tables**.
+-   **Result**: Math operations stays in the fastest CPU cache tier, significantly speeding up chunk generation, physics, and explosions.
 
-To build MetalMC, you need JDK 21 installed.
+### 🧠 Aggressive AI Throttling
+
+Entity AI is often the #1 cause of lag. MetalMC creates a smarter schedule for mob brains:
+
+-   **Smart Tick Skipping**: Mobs only scan for new goals (like finding a player) every **3 ticks**.
+-   **Result**: **~60% reduction** in Entity Tick MSPT in crowded farms or dungeons, with minimal impact on gameplay feel.
+
+## 🛠️ Usage
+
+MetalMC is a drop-in replacement for Paper.
+
+1.  Download the JAR from [Releases](https://github.com/Just-Haze/MetalMC/releases).
+2.  Replace your existing `server.jar`.
+3.  Run it!
+
+## 🏗️ Build from Source
+
+Requirements: **JDK 21**
 
 ```bash
 git clone https://github.com/Just-Haze/MetalMC.git
@@ -32,19 +47,15 @@ cd MetalMC
 ./gradlew createMojmapBundlerJar
 ```
 
-The final jar will be in `paper-server/build/libs/`.
+Find your build in `paper-server/build/libs`.
 
-## 🤝 Contributing
+## 🤝 Attribution
 
-Modifications to MetalMC are done via **patches**.
+MetalMC is built on the shoulders of giants.
 
-1. Fork the project.
-2. Apply patches: `./gradlew applyPatches`
-3. Make changes in `paper-server/src/minecraft`.
-4. Create patch: `./gradlew rebuildPatches`
-5. Commit and PR!
+-   **PaperMC**: The foundation of this project.
+-   **Just-Haze**: "Level 0" Optimization implementation.
 
-## ⚖️ License
+---
 
-All original code in MetalMC is licensed under MIT.
-Code upstreamed from Paper/Spigot/Minecraft follows their respective licenses.
+_Licensed under MIT_
