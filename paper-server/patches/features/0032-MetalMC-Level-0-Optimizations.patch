@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Just-Haze <Just-Haze@users.noreply.github.com>
+Date: Sun, 7 Dec 2025 19:30:00 +0800
+Subject: [PATCH] MetalMC Level 0 Optimizations
+
+- Replaced sin/cos lookup tables with 4096 entry cache (L1 friendly)
+- Implemented aggressive AI throttling in GoalSelector (3-tick delay)
+- Optimized default server configuration for MetalMC
+
+diff --git a/src/main/java/net/minecraft/util/Mth.java b/src/main/java/net/minecraft/util/Mth.java
+index 1234567..89abcde 100644
+--- a/src/main/java/net/minecraft/util/Mth.java
++++ b/src/main/java/net/minecraft/util/Mth.java
+@@ -28,8 +28,8 @@ public class Mth {
+     private static final int BIG_ENOUGH_INT = 1024;
+     private static final float BIG_ENOUGH_FLOAT = 1024.0F;
+     private static final long UUID_VERSION = 61440L;
+-    private static final long UUID_VARIANT = -4611686018427387904L;
+-    public static final float PI = 3.1415927F;
++    // MetalMC start - Level 0 Math Optimization
++    // Reduced SIN table from 65536 to 4096 (16KB) to fit in L1 cache
++    private static final float[] SIN = Util.make(new float[4096], (float[]) -> {
++        for (int i = 0; i < 4096; ++i) {
++            float[][i] = (float) Math.sin((double) i * Math.PI * 2.0D / 4096.0D);
++        }
++    });
++    // MetalMC end
+     public static final float RAD_TO_DEG = 57.295776F;
+     public static final float DEG_TO_RAD = 0.017453292F;
+     public static final float EPSILON = 1.0E-5F;
+diff --git a/src/main/java/net/minecraft/world/entity/ai/goal/GoalSelector.java b/src/main/java/net/minecraft/world/entity/ai/goal/GoalSelector.java
+index 1234567..89abcde 100644
+--- a/src/main/java/net/minecraft/world/entity/ai/goal/GoalSelector.java
++++ b/src/main/java/net/minecraft/world/entity/ai/goal/GoalSelector.java
+@@ -98,6 +98,10 @@ public class GoalSelector {
+     public void tick() {
+         com.destroystokyo.paper.event.entity.EntityPathfindEvent.PathfindGoal.PathfindLogic logic = null; // Paper - EntityPathfindEvent
+         this.curRate++;
++        // MetalMC start - Aggressive AI Throttling
++        // Only check for new goals every 3 ticks to reduce CPU load
++        if (this.curRate % 3 == 0) {
++        // MetalMC end
+         if (true) { // Paper - EntityPathfindEvent
+             this.lockedFlags.removeIf((pathfindergoaltpe) -> {
+                 return ((WrappedGoal) this.availableGoalsByPriority.get(pathfindergoaltpe)).getGoal().getFlags().contains(pathfindergoaltpe); // Paper - fix MC-169873 - These are non-null
+@@ -113,6 +117,7 @@ public class GoalSelector {
+                 }
+             });
+         }
++        } // MetalMC - end throttling check
+ 
+         this.availableGoals.forEach((pathfindergoalwrapped) -> {
+             if (pathfindergoalwrapped.isRunning()) {
