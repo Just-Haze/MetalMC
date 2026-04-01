@@ -60,6 +60,21 @@ public class MetalConfig {
 
     public static boolean optimizeChunkTicking;
 
+    // Dynamic Activation of Brain (DAB)
+    public static boolean dabEnabled;
+    public static int dabStartDistance;
+    public static int dabMaxTickFreq;
+    public static double dabActivationDistMod;
+
+    // MetalMath
+    public static boolean metalMathEnabled;
+
+    // Hopper optimizations
+    public static boolean optimizeHoppers;
+
+    // Tick scheduler
+    public static int tickSchedulerBuckets;
+
     // Multithreading Optimizations
     // Async Chunk Loading
     public static boolean asyncChunkLoadingEnabled;
@@ -69,8 +84,6 @@ public class MetalConfig {
 
     // Entity Processing
     public static boolean asyncEntityProcessingEnabled;
-    public static boolean asyncPathfinding;
-    public static boolean asyncCollisionDetection;
     public static int entityProcessingThreads;
 
     // Tile Entity Processing
@@ -94,6 +107,21 @@ public class MetalConfig {
 
     private static void optimizations() {
         optimizeChunkTicking = getBoolean("optimizations.chunk-ticking", true);
+
+        // Dynamic Activation of Brain
+        dabEnabled = getBoolean("optimizations.dab.enabled", true);
+        dabStartDistance = getInt("optimizations.dab.start-distance", 12);
+        dabMaxTickFreq = getInt("optimizations.dab.max-tick-freq", 20);
+        dabActivationDistMod = getDouble("optimizations.dab.activation-dist-mod", 8.0);
+
+        // MetalMath L1-cache trig tables
+        metalMathEnabled = getBoolean("optimizations.metal-math.enabled", true);
+
+        // Hopper tick-skip optimizations
+        optimizeHoppers = getBoolean("optimizations.hoppers.enabled", true);
+
+        // Tick scheduler bucket count (2, 4, or 8 recommended)
+        tickSchedulerBuckets = getInt("optimizations.tick-scheduler.buckets", 4);
     }
 
     private static void multithreading() {
@@ -106,8 +134,6 @@ public class MetalConfig {
 
         // Entity Processing
         asyncEntityProcessingEnabled = getBoolean("multithreading.async-entity-processing.enabled", true);
-        asyncPathfinding = getBoolean("multithreading.async-entity-processing.async-pathfinding", true);
-        asyncCollisionDetection = getBoolean("multithreading.async-entity-processing.async-collision-detection", false);
         entityProcessingThreads = getInt("multithreading.async-entity-processing.threads", 2);
 
         // Tile Entity Processing
