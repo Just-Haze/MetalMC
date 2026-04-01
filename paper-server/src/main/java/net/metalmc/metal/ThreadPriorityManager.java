@@ -1,8 +1,10 @@
 package net.metalmc.metal;
 
-import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.lang.ref.WeakReference;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Manages thread priorities dynamically based on server performance.
@@ -15,6 +17,12 @@ public class ThreadPriorityManager {
     private final Thread mainThread;
     private volatile double currentTPS = 20.0;
     private volatile boolean underLoad = false;
+
+    /** Weak references to all registered worker threads so they can be adjusted dynamically. */
+    private final CopyOnWriteArrayList<WorkerThreadEntry> workerThreads = new CopyOnWriteArrayList<>();
+
+    /** Pairs a weak thread reference with its WorkerType so default priorities can be restored. */
+    private record WorkerThreadEntry(WeakReference<Thread> ref, WorkerType type) {}
 
     // TPS thresholds
     private static final double TPS_CRITICAL = 15.0;
@@ -38,6 +46,14 @@ public class ThreadPriorityManager {
                 LOGGER.warn("Failed to set main thread priority: {}", e.getMessage());
             }
         }
+    }
+
+    /**
+     * Register a worker thread so its priority can be adjusted dynamically.
+     * Uses a WeakReference so finished threads are automatically garbage-collected.
+     */
+    public void registerWorkerThread(Thread thread, WorkerType type) {
+        workerThreads.add(new WorkerThreadEntry(new WeakReference<>(thread), type));
     }
 
     /**
@@ -109,22 +125,21 @@ public class ThreadPriorityManager {
     }
 
     /**
-     * Throttle worker threads to minimum priority
+     * Throttle worker threads to minimum priority during critical load.
      */
     private void throttleWorkers() {
-        // Worker threads will be throttled when they check their priority
-        // This is handled in the thread pools
+        applyWorkerPriority(Thread.MIN_PRIORITY);
     }
 
     /**
-     * Reduce worker thread priorities slightly
+     * Reduce worker thread priorities slightly during warning-level load.
      */
     private void reduceWorkerPriorities() {
-        // Gradual reduction handled by thread pools
+        applyWorkerPriority(Math.max(Thread.MIN_PRIORITY, Thread.NORM_PRIORITY - 1));
     }
 
     /**
-     * Restore normal thread priorities
+     * Restore normal thread priorities when server is running well.
      */
     private void restoreNormalPriorities() {
         try {
@@ -132,6 +147,45 @@ public class ThreadPriorityManager {
         } catch (SecurityException e) {
             LOGGER.warn("Failed to restore main thread priority: {}", e.getMessage());
         }
+        applyWorkerPriority(-1); // -1 signals "use configured defaults"
+    }
+
+    /**
+     * Apply a priority to all live registered worker threads.
+     * A priority of {@code -1} means "restore each thread to its configured default"
+     * (using the {@link WorkerType} recorded at registration time).
+     */
+    private void applyWorkerPriority(int priority) {
+        // Prune dead entries in a single pass (O(1) array copies instead of O(n)).
+        workerThreads.removeIf(entry -> {
+            Thread t = entry.ref().get();
+            return t == null || !t.isAlive();
+        });
+
+        for (WorkerThreadEntry entry : workerThreads) {
+            Thread t = entry.ref().get();
+            if (t == null || !t.isAlive()) {
+                continue;
+            }
+            int target = priority < 0 ? configuredPriority(entry.type()) : priority;
+            try {
+                t.setPriority(Math.min(Thread.MAX_PRIORITY, Math.max(Thread.MIN_PRIORITY, target)));
+            } catch (SecurityException e) {
+                LOGGER.warn("Failed to adjust worker thread priority: {}", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Look up the configured base priority for the given {@link WorkerType}.
+     */
+    private int configuredPriority(WorkerType type) {
+        return switch (type) {
+            case CHUNK_LOADING -> MetalConfig.chunkLoadingPriority;
+            case ENTITY_PROCESSING -> MetalConfig.entityProcessingPriority;
+            case TILE_ENTITY -> Math.max(Thread.MIN_PRIORITY, MetalConfig.entityProcessingPriority - 1);
+            case BACKGROUND -> Math.max(Thread.MIN_PRIORITY, Thread.NORM_PRIORITY - 2);
+        };
     }
 
     /**

@@ -150,6 +150,8 @@ public class AsyncTileEntityProcessor {
 
             // Set thread priority
             priorityManager.setWorkerThreadPriority(thread, ThreadPriorityManager.WorkerType.TILE_ENTITY);
+            // Register so dynamic priority adjustment can reach this thread
+            priorityManager.registerWorkerThread(thread, ThreadPriorityManager.WorkerType.TILE_ENTITY);
 
             return thread;
         }

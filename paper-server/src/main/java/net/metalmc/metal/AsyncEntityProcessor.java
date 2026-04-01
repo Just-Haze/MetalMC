@@ -149,6 +149,8 @@ public class AsyncEntityProcessor {
 
             // Set thread priority
             priorityManager.setWorkerThreadPriority(thread, ThreadPriorityManager.WorkerType.ENTITY_PROCESSING);
+            // Register so dynamic priority adjustment can reach this thread
+            priorityManager.registerWorkerThread(thread, ThreadPriorityManager.WorkerType.ENTITY_PROCESSING);
 
             return thread;
         }
