@@ -2,128 +2,117 @@ package net.metalmc.metal;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.navigation.PathNavigation;
-import net.minecraft.world.level.pathfinder.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Async entity processing system for safe operations like pathfinding.
- * Only performs calculations async - all state changes happen on main thread.
+ * Async entity processing helpers for MetalMC.
+ *
+ * <p>This class manages a small thread pool for offloading CPU-bound,
+ * read-only entity computations.  All <em>state mutations</em> must still
+ * be applied on the main server thread; workers only perform calculations
+ * and return results via {@link CompletableFuture}.
+ *
+ * <p>Currently provides:
+ * <ul>
+ *   <li>A pre-warmed thread pool for future async work submission.</li>
+ *   <li>{@link #shouldProcessEntity} — a fast proximity gate that
+ *       combines EAR and DAB checks before expensive work begins.</li>
+ *   <li>Basic statistics accessible via {@link #getStatistics()}.</li>
+ * </ul>
  */
 public class AsyncEntityProcessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(AsyncEntityProcessor.class);
 
     private final ExecutorService entityWorkerPool;
     private final ThreadPriorityManager priorityManager;
-    private final AtomicInteger activePathfinds = new AtomicInteger(0);
-    private final AtomicInteger totalPathfinds = new AtomicInteger(0);
-
-    // Timeout for async operations (milliseconds)
-    private static final long PATHFIND_TIMEOUT_MS = 50;
+    private final AtomicInteger activeTasks = new AtomicInteger(0);
+    private final AtomicLong totalTasksSubmitted = new AtomicLong(0);
 
     public AsyncEntityProcessor(ThreadPriorityManager priorityManager) {
         this.priorityManager = priorityManager;
 
-        // Create thread pool for entity processing
         int threadCount = MetalConfig.entityProcessingThreads;
         this.entityWorkerPool = Executors.newFixedThreadPool(threadCount, new EntityWorkerThreadFactory());
 
-        LOGGER.info("AsyncEntityProcessor initialized with {} threads", threadCount);
+        LOGGER.info("AsyncEntityProcessor initialised with {} threads", threadCount);
     }
 
     /**
-     * Calculate pathfinding asynchronously
-     * Returns a CompletableFuture that completes with the path or null if
-     * timeout/error
+     * Submits a read-only callable to the entity worker pool.
+     *
+     * <p>The callable must not write to any shared Minecraft state.
+     * The returned future completes with the callable's result, or
+     * {@code null} on error or timeout.
+     *
+     * @param task      the computation to run off the main thread
+     * @param timeoutMs maximum time to wait for the result (milliseconds)
+     * @param <T>       result type
+     * @return future that completes with the result, or {@code null}
      */
-    public CompletableFuture<Path> calculatePathAsync(Mob mob, BlockPos target) {
-        if (!MetalConfig.asyncPathfinding || !MetalConfig.asyncEntityProcessingEnabled) {
-            // Fall back to sync pathfinding
-            return CompletableFuture.completedFuture(null);
-        }
-
-        activePathfinds.incrementAndGet();
-        totalPathfinds.incrementAndGet();
+    public <T> CompletableFuture<T> submitReadOnly(final Callable<T> task, final long timeoutMs) {
+        totalTasksSubmitted.incrementAndGet();
+        activeTasks.incrementAndGet();
 
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return calculatePath(mob, target);
+                return task.call();
             } catch (Exception e) {
-                LOGGER.warn("Error in async pathfinding for {}: {}", mob.getType(), e.getMessage());
+                LOGGER.warn("Async entity task failed: {}", e.getMessage());
                 return null;
             } finally {
-                activePathfinds.decrementAndGet();
+                activeTasks.decrementAndGet();
             }
         }, entityWorkerPool)
-                .orTimeout(PATHFIND_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                .exceptionally(throwable -> {
-                    // Timeout or error - return null to fall back to sync
-                    return null;
-                });
+                .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                .exceptionally(throwable -> null);
     }
 
     /**
-     * Perform the actual pathfinding calculation
-     * This is thread-safe as it only reads world state
+     * Returns {@code true} when {@code mob} should have expensive processing
+     * performed on it this tick.
+     *
+     * <p>Combines:
+     * <ol>
+     *   <li>A quick distance gate via
+     *       {@link EntityActivationOptimizer#isPlayerWithinRange} — skips
+     *       entities that are completely outside player view.</li>
+     *   <li>The DAB throttle via {@link DynamicActivationBrain#shouldTickBrain}
+     *       — limits AI ticks for entities between the start distance and
+     *       view distance.</li>
+     * </ol>
+     *
+     * <p>Call this before any pathfinding, goal evaluation, or expensive
+     * AI work on a mob.
+     *
+     * @param mob the mob to test
+     * @return {@code true} if the mob should be processed this tick
      */
-    private Path calculatePath(Mob mob, BlockPos target) {
-        PathNavigation navigation = mob.getNavigation();
-
-        // Note: This is a simplified version
-        // The actual implementation would need to ensure thread-safe access to world
-        // data
-        // For now, this returns null to indicate sync fallback
-
-        // TODO: Implement thread-safe pathfinding calculation
-        // This would require:
-        // 1. Snapshot of relevant world blocks
-        // 2. Pathfinding algorithm on snapshot
-        // 3. Return path for main thread to apply
-
-        return null;
-    }
-
-    /**
-     * Calculate collision detection asynchronously
-     * Only enabled if configured (experimental)
-     */
-    public CompletableFuture<Boolean> checkCollisionAsync(Mob mob, BlockPos pos) {
-        if (!MetalConfig.asyncCollisionDetection || !MetalConfig.asyncEntityProcessingEnabled) {
-            return CompletableFuture.completedFuture(false);
+    public static boolean shouldProcessEntity(final Mob mob) {
+        // Hard gate: more than 128 blocks from every player → skip entirely.
+        if (!EntityActivationOptimizer.isPlayerWithinRange(mob, 128.0)) {
+            return false;
         }
-
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                // Thread-safe collision check
-                // Would need to snapshot relevant collision boxes
-                return false; // Placeholder
-            } catch (Exception e) {
-                LOGGER.warn("Error in async collision detection: {}", e.getMessage());
-                return false;
-            }
-        }, entityWorkerPool)
-                .orTimeout(10, TimeUnit.MILLISECONDS)
-                .exceptionally(throwable -> false);
+        // DAB throttle for entities in the mid-range zone.
+        return DynamicActivationBrain.shouldTickBrain(mob);
     }
 
     /**
-     * Get processing statistics
+     * Returns current processing statistics.
      */
     public ProcessingStatistics getStatistics() {
-        return new ProcessingStatistics(
-                totalPathfinds.get(),
-                activePathfinds.get());
+        return new ProcessingStatistics(totalTasksSubmitted.get(), activeTasks.get());
     }
 
     /**
-     * Shutdown the entity processor
+     * Shuts down the worker pool gracefully.
      */
     public void shutdown() {
-        LOGGER.info("Shutting down AsyncEntityProcessor...");
+        LOGGER.info("Shutting down AsyncEntityProcessor…");
         entityWorkerPool.shutdown();
         try {
             if (!entityWorkerPool.awaitTermination(10, TimeUnit.SECONDS)) {
@@ -136,9 +125,6 @@ public class AsyncEntityProcessor {
         LOGGER.info("AsyncEntityProcessor shutdown complete");
     }
 
-    /**
-     * Thread factory for entity worker threads
-     */
     private class EntityWorkerThreadFactory implements ThreadFactory {
         private final AtomicInteger threadNumber = new AtomicInteger(1);
 
@@ -146,25 +132,17 @@ public class AsyncEntityProcessor {
         public Thread newThread(Runnable r) {
             Thread thread = new Thread(r, "MetalMC-EntityWorker-" + threadNumber.getAndIncrement());
             thread.setDaemon(true);
-
-            // Set thread priority
             priorityManager.setWorkerThreadPriority(thread, ThreadPriorityManager.WorkerType.ENTITY_PROCESSING);
-
             return thread;
         }
     }
 
-    /**
-     * Processing statistics record
-     */
-    public record ProcessingStatistics(
-            int totalPathfinds,
-            int activePathfinds) {
+    public record ProcessingStatistics(long totalTasksSubmitted, int activeTasks) {
         @Override
         public String toString() {
-            return String.format(
-                    "EntityProcessing Stats: TotalPathfinds=%d, Active=%d",
-                    totalPathfinds, activePathfinds);
+            return String.format("EntityProcessing Stats: Total=%d, Active=%d",
+                    totalTasksSubmitted, activeTasks);
         }
     }
 }
+
