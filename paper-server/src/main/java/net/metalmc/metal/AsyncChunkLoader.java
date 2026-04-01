@@ -17,7 +17,6 @@ public class AsyncChunkLoader {
     private static final Logger LOGGER = LoggerFactory.getLogger(AsyncChunkLoader.class);
 
     private final ExecutorService chunkLoadExecutor;
-    private final PriorityBlockingQueue<ChunkLoadTask> taskQueue;
     private final ThreadPriorityManager priorityManager;
     private final AtomicInteger activeLoads = new AtomicInteger(0);
 
@@ -27,7 +26,6 @@ public class AsyncChunkLoader {
 
     public AsyncChunkLoader(ThreadPriorityManager priorityManager) {
         this.priorityManager = priorityManager;
-        this.taskQueue = new PriorityBlockingQueue<>(1000);
 
         // Create thread pool with configured size
         int threadCount = MetalConfig.chunkLoadingThreads;
@@ -100,7 +98,7 @@ public class AsyncChunkLoader {
                 totalLoadsProcessed.get(),
                 playerRequestedLoads.get(),
                 activeLoads.get(),
-                taskQueue.size());
+                0);
     }
 
     /**
@@ -178,6 +176,8 @@ public class AsyncChunkLoader {
 
             // Set thread priority
             priorityManager.setWorkerThreadPriority(thread, ThreadPriorityManager.WorkerType.CHUNK_LOADING);
+            // Register so dynamic priority adjustment can reach this thread
+            priorityManager.registerWorkerThread(thread, ThreadPriorityManager.WorkerType.CHUNK_LOADING);
 
             return thread;
         }
