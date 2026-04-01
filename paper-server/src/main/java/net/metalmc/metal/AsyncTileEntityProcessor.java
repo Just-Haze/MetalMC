@@ -7,9 +7,12 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Async tile entity processing for safe calculations.
- * Handles hoppers, furnaces, and other tile entities where calculations
- * can be done async and state changes applied on main thread.
+ * Async tile entity processing for computationally expensive tile-entity
+ * operations (hoppers, furnaces).
+ *
+ * <p>Only read-only calculations are performed on worker threads.
+ * The results are returned as futures so that the main thread can apply
+ * any inventory or state mutations safely.
  */
 public class AsyncTileEntityProcessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(AsyncTileEntityProcessor.class);
@@ -19,30 +22,36 @@ public class AsyncTileEntityProcessor {
     private final AtomicInteger activeProcessing = new AtomicInteger(0);
     private final AtomicInteger totalProcessed = new AtomicInteger(0);
 
-    // Timeout for async operations (milliseconds)
     private static final long PROCESSING_TIMEOUT_MS = 20;
 
     public AsyncTileEntityProcessor(ThreadPriorityManager priorityManager) {
         this.priorityManager = priorityManager;
 
-        // Create thread pool for tile entity processing
         int threadCount = MetalConfig.tileEntityThreads;
-        this.tileEntityWorkerPool = Executors.newFixedThreadPool(threadCount, new TileEntityWorkerThreadFactory());
+        AtomicInteger threadNumber = new AtomicInteger(1);
+        this.tileEntityWorkerPool = Executors.newFixedThreadPool(threadCount, r -> {
+            Thread thread = new Thread(r, "MetalMC-TileEntityWorker-" + threadNumber.getAndIncrement());
+            thread.setDaemon(true);
+            priorityManager.setWorkerThreadPriority(thread, ThreadPriorityManager.WorkerType.TILE_ENTITY);
+            return thread;
+        });
 
         LOGGER.info("AsyncTileEntityProcessor initialized with {} threads", threadCount);
     }
 
     /**
-     * Process hopper item transfer calculations asynchronously
-     * Returns CompletableFuture with transfer result
+     * Asynchronously calculate hopper item transfer eligibility.
+     *
+     * <p>Returns {@link HopperTransferResult#SKIP} when async hopper processing
+     * is disabled, allowing the vanilla tick path to handle the transfer instead.
      */
     public CompletableFuture<HopperTransferResult> processHopperAsync() {
         if (!MetalConfig.asyncHoppers || !MetalConfig.asyncTileEntitiesEnabled) {
             return CompletableFuture.completedFuture(HopperTransferResult.SKIP);
         }
 
-        activeProcessing.incrementAndGet();
         totalProcessed.incrementAndGet();
+        activeProcessing.incrementAndGet();
 
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -59,29 +68,34 @@ public class AsyncTileEntityProcessor {
     }
 
     /**
-     * Calculate hopper item transfer
-     * Thread-safe calculation only - state changes on main thread
+     * Calculate hopper transfer eligibility from a thread-safe inventory snapshot.
+     *
+     * <p>A full implementation would:
+     * <ol>
+     *   <li>Capture a read-only snapshot of the hopper's and target's inventories.</li>
+     *   <li>Determine which item stack (if any) can be moved.</li>
+     *   <li>Return {@link HopperTransferResult#SUCCESS} with the transfer details
+     *       for the main thread to apply.</li>
+     * </ol>
      */
     private HopperTransferResult calculateHopperTransfer() {
-        // TODO: Implement thread-safe hopper transfer calculation
-        // This would:
-        // 1. Snapshot hopper and target inventories
-        // 2. Calculate which items can transfer
-        // 3. Return result for main thread to apply
-
-        return HopperTransferResult.SKIP; // Placeholder
+        // TODO: Implement thread-safe hopper transfer calculation.
+        return HopperTransferResult.SKIP;
     }
 
     /**
-     * Process furnace smelting calculations asynchronously
+     * Asynchronously calculate furnace smelting progress.
+     *
+     * <p>Returns {@link FurnaceSmeltResult#SKIP} when async furnace processing
+     * is disabled.
      */
     public CompletableFuture<FurnaceSmeltResult> processFurnaceAsync() {
         if (!MetalConfig.asyncFurnaces || !MetalConfig.asyncTileEntitiesEnabled) {
             return CompletableFuture.completedFuture(FurnaceSmeltResult.SKIP);
         }
 
-        activeProcessing.incrementAndGet();
         totalProcessed.incrementAndGet();
+        activeProcessing.incrementAndGet();
 
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -98,30 +112,29 @@ public class AsyncTileEntityProcessor {
     }
 
     /**
-     * Calculate furnace smelting progress
-     * Thread-safe calculation only
+     * Calculate furnace smelting progress from a thread-safe state snapshot.
+     *
+     * <p>A full implementation would:
+     * <ol>
+     *   <li>Capture a read-only snapshot of the furnace state (fuel, items, progress).</li>
+     *   <li>Compute how many ticks of progress to advance.</li>
+     *   <li>Return {@link FurnaceSmeltResult#SUCCESS} with the delta for the main thread.</li>
+     * </ol>
      */
     private FurnaceSmeltResult calculateFurnaceSmelting() {
-        // TODO: Implement thread-safe furnace calculation
-        // This would:
-        // 1. Snapshot furnace state (fuel, items, progress)
-        // 2. Calculate smelting progress
-        // 3. Return result for main thread to apply
-
-        return FurnaceSmeltResult.SKIP; // Placeholder
+        // TODO: Implement thread-safe furnace smelting calculation.
+        return FurnaceSmeltResult.SKIP;
     }
 
     /**
-     * Get processing statistics
+     * Get current processing statistics.
      */
     public TileEntityStatistics getStatistics() {
-        return new TileEntityStatistics(
-                totalProcessed.get(),
-                activeProcessing.get());
+        return new TileEntityStatistics(totalProcessed.get(), activeProcessing.get());
     }
 
     /**
-     * Shutdown the tile entity processor
+     * Shut down the tile entity processor, waiting for in-flight tasks to finish.
      */
     public void shutdown() {
         LOGGER.info("Shutting down AsyncTileEntityProcessor...");
@@ -137,50 +150,21 @@ public class AsyncTileEntityProcessor {
         LOGGER.info("AsyncTileEntityProcessor shutdown complete");
     }
 
-    /**
-     * Thread factory for tile entity worker threads
-     */
-    private class TileEntityWorkerThreadFactory implements ThreadFactory {
-        private final AtomicInteger threadNumber = new AtomicInteger(1);
-
-        @Override
-        public Thread newThread(Runnable r) {
-            Thread thread = new Thread(r, "MetalMC-TileEntityWorker-" + threadNumber.getAndIncrement());
-            thread.setDaemon(true);
-
-            // Set thread priority
-            priorityManager.setWorkerThreadPriority(thread, ThreadPriorityManager.WorkerType.TILE_ENTITY);
-
-            return thread;
-        }
-    }
-
-    /**
-     * Hopper transfer result
-     */
     public enum HopperTransferResult {
-        SUCCESS, // Transfer calculated successfully
-        SKIP, // Skip async processing
-        ERROR, // Error occurred
-        TIMEOUT // Async operation timed out
+        SUCCESS,
+        SKIP,
+        ERROR,
+        TIMEOUT
     }
 
-    /**
-     * Furnace smelt result
-     */
     public enum FurnaceSmeltResult {
-        SUCCESS, // Smelting calculated successfully
-        SKIP, // Skip async processing
-        ERROR, // Error occurred
-        TIMEOUT // Async operation timed out
+        SUCCESS,
+        SKIP,
+        ERROR,
+        TIMEOUT
     }
 
-    /**
-     * Tile entity statistics record
-     */
-    public record TileEntityStatistics(
-            int totalProcessed,
-            int activeProcessing) {
+    public record TileEntityStatistics(int totalProcessed, int activeProcessing) {
         @Override
         public String toString() {
             return String.format(

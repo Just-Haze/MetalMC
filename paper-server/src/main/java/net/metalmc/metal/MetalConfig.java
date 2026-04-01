@@ -5,13 +5,14 @@ import java.io.File;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.List;
-import net.minecraft.server.MinecraftServer;
-import org.bukkit.Bukkit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 public class MetalConfig {
     private static File CONFIG_FILE;
     private static final String HEADER = "MetalMC Configuration File\n";
+    private static final Logger LOGGER = Logger.getLogger("MetalMC");
 
     public static YamlConfiguration config;
     public static int version;
@@ -22,7 +23,10 @@ public class MetalConfig {
         config = new YamlConfiguration();
         try {
             config.load(CONFIG_FILE);
-        } catch (Exception ignored) {
+        } catch (java.io.FileNotFoundException ignored) {
+            // Config does not exist yet; it will be created with defaults.
+        } catch (Exception ex) {
+            LOGGER.log(Level.WARNING, "Could not load " + CONFIG_FILE + ", using defaults", ex);
         }
         config.options().header(HEADER);
         config.options().copyDefaults(true);
@@ -40,22 +44,24 @@ public class MetalConfig {
 
     protected static boolean getBoolean(String path, boolean def) {
         config.addDefault(path, def);
-        return config.getBoolean(path, config.getBoolean(path));
+        return config.getBoolean(path, def);
     }
 
     protected static int getInt(String path, int def) {
         config.addDefault(path, def);
-        return config.getInt(path, config.getInt(path));
+        return config.getInt(path, def);
     }
 
     protected static double getDouble(String path, double def) {
         config.addDefault(path, def);
-        return config.getDouble(path, config.getDouble(path));
+        return config.getDouble(path, def);
     }
 
-    protected static <T> List<T> getList(String path, T def) {
+    protected static <T> List<T> getList(String path, List<T> def) {
         config.addDefault(path, def);
-        return (List<T>) config.getList(path, config.getList(path));
+        @SuppressWarnings("unchecked")
+        List<T> result = (List<T>) config.getList(path, def);
+        return result;
     }
 
     public static boolean optimizeChunkTicking;
@@ -91,6 +97,10 @@ public class MetalConfig {
     public static boolean taskBatching;
     public static boolean autoAsyncDetection;
     public static int maxAsyncTasks;
+
+    private static void general() {
+        verbose = getBoolean("verbose", false);
+    }
 
     private static void optimizations() {
         optimizeChunkTicking = getBoolean("optimizations.chunk-ticking", true);
@@ -149,8 +159,7 @@ public class MetalConfig {
         try {
             config.save(CONFIG_FILE);
         } catch (Exception ex) {
-            Bukkit.getLogger().severe("Could not save " + CONFIG_FILE);
-            ex.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Could not save " + CONFIG_FILE, ex);
         }
     }
 }

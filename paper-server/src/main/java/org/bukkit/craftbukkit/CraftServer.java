@@ -991,6 +991,8 @@ public final class CraftServer implements Server {
         }
 
         org.spigotmc.SpigotConfig.init((File) this.console.options.valueOf("spigot-settings")); // Spigot
+        net.metalmc.metal.MetalConfig.init((File) this.console.options.valueOf("metal-settings")); // MetalMC
+        net.metalmc.metal.MetalServer.init(); // MetalMC
         this.console.paperConfigurations.reloadConfigs(this.console);
         for (ServerLevel world : this.console.getAllLevels()) {
             // world.serverLevelData.setDifficulty(config.difficulty); // Paper - per level difficulty
@@ -1891,6 +1893,7 @@ public final class CraftServer implements Server {
 
     @Override
     public void shutdown() {
+        net.metalmc.metal.MetalServer.shutdown(); // MetalMC
         this.console.halt(false);
     }
 

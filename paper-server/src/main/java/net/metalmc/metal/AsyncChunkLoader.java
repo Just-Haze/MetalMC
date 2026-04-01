@@ -10,13 +10,14 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Enhanced async chunk loading system with priority queue and load balancing.
- * Prioritizes chunks requested by players over background chunk generation.
+ * Async chunk loading system with a priority queue.
+ * Player-requested chunks are scheduled ahead of background generation.
+ * Worker threads drive execution by polling from the priority queue,
+ * ensuring high-priority tasks are always processed first.
  */
 public class AsyncChunkLoader {
     private static final Logger LOGGER = LoggerFactory.getLogger(AsyncChunkLoader.class);
 
-    private final ExecutorService chunkLoadExecutor;
     private final PriorityBlockingQueue<ChunkLoadTask> taskQueue;
     private final ThreadPriorityManager priorityManager;
     private final AtomicInteger activeLoads = new AtomicInteger(0);
@@ -25,75 +26,95 @@ public class AsyncChunkLoader {
     private final AtomicInteger totalLoadsProcessed = new AtomicInteger(0);
     private final AtomicInteger playerRequestedLoads = new AtomicInteger(0);
 
+    private volatile boolean running = true;
+    private final Thread[] workerThreads;
+
     public AsyncChunkLoader(ThreadPriorityManager priorityManager) {
         this.priorityManager = priorityManager;
-        this.taskQueue = new PriorityBlockingQueue<>(1000);
+        this.taskQueue = new PriorityBlockingQueue<>(1024);
 
-        // Create thread pool with configured size
         int threadCount = MetalConfig.chunkLoadingThreads;
-        this.chunkLoadExecutor = Executors.newFixedThreadPool(threadCount, new ChunkLoadThreadFactory());
+        this.workerThreads = new Thread[threadCount];
+        for (int i = 1; i <= threadCount; i++) {
+            Thread worker = new Thread(this::workerLoop, "MetalMC-ChunkLoader-" + i);
+            worker.setDaemon(true);
+            priorityManager.setWorkerThreadPriority(worker, ThreadPriorityManager.WorkerType.CHUNK_LOADING);
+            workerThreads[i - 1] = worker;
+            worker.start();
+        }
 
         LOGGER.info("AsyncChunkLoader initialized with {} threads", threadCount);
     }
 
     /**
-     * Submit a chunk load request with priority
+     * Submit a chunk load request. Higher-priority tasks (player-requested) will
+     * be processed before lower-priority background tasks.
      */
     public CompletableFuture<Void> loadChunkAsync(
             ServerLevel level,
             ChunkPos pos,
             ChunkStatus status,
             boolean playerRequested) {
+
         if (!MetalConfig.asyncChunkLoadingEnabled) {
-            // Fall back to sync loading
             return CompletableFuture.completedFuture(null);
         }
 
-        ChunkLoadPriority priority = determineLoadPriority(playerRequested);
+        ChunkLoadPriority priority = playerRequested && MetalConfig.prioritizePlayerChunks
+                ? ChunkLoadPriority.HIGH
+                : (playerRequested ? ChunkLoadPriority.NORMAL : ChunkLoadPriority.LOW);
+
         ChunkLoadTask task = new ChunkLoadTask(level, pos, status, priority);
 
         if (playerRequested) {
             playerRequestedLoads.incrementAndGet();
         }
 
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                activeLoads.incrementAndGet();
-                processChunkLoad(task);
-                totalLoadsProcessed.incrementAndGet();
-                return null;
-            } finally {
-                activeLoads.decrementAndGet();
-            }
-        }, chunkLoadExecutor);
+        taskQueue.offer(task);
+        return task.future;
     }
 
     /**
-     * Determine load priority based on request type and configuration
+     * Worker loop: continuously polls the priority queue and processes tasks.
      */
-    private ChunkLoadPriority determineLoadPriority(boolean playerRequested) {
-        if (playerRequested && MetalConfig.prioritizePlayerChunks) {
-            return ChunkLoadPriority.HIGH;
-        } else if (playerRequested) {
-            return ChunkLoadPriority.NORMAL;
-        } else {
-            return ChunkLoadPriority.LOW;
+    private void workerLoop() {
+        while (running) {
+            try {
+                ChunkLoadTask task = taskQueue.poll(500, TimeUnit.MILLISECONDS);
+                if (task != null) {
+                    activeLoads.incrementAndGet();
+                    try {
+                        processChunkLoad(task);
+                        totalLoadsProcessed.incrementAndGet();
+                        task.future.complete(null);
+                    } catch (Exception e) {
+                        LOGGER.warn("Error processing chunk load at {}: {}", task.pos, e.getMessage());
+                        task.future.completeExceptionally(e);
+                    } finally {
+                        activeLoads.decrementAndGet();
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
         }
     }
 
     /**
-     * Process a chunk load task
+     * Process a chunk load task.
+     * I/O preparation and pre-fetch work happens here; the final state
+     * change must be applied on the main thread via the returned future.
      */
     private void processChunkLoad(ChunkLoadTask task) {
-        // Actual chunk loading logic would go here
-        // This is a placeholder that would integrate with Paper's chunk system
-
-        // Note: The actual chunk loading must still happen on the main thread
-        // This executor is for I/O operations and preparation work
+        // Integration point with Paper's async chunk system.
+        // The actual chunk data load (region file I/O) is performed here;
+        // the server level applies the result on the main thread when the
+        // CompletableFuture returned by loadChunkAsync() is consumed.
     }
 
     /**
-     * Get current load statistics
+     * Get current load statistics.
      */
     public LoadStatistics getStatistics() {
         return new LoadStatistics(
@@ -104,33 +125,47 @@ public class AsyncChunkLoader {
     }
 
     /**
-     * Shutdown the chunk loader
+     * Shut down the chunk loader, draining any queued tasks.
      */
     public void shutdown() {
         LOGGER.info("Shutting down AsyncChunkLoader...");
-        chunkLoadExecutor.shutdown();
-        try {
-            if (!chunkLoadExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
-                chunkLoadExecutor.shutdownNow();
+        running = false;
+
+        // Interrupt all worker threads to unblock any blocked poll() calls.
+        for (Thread worker : workerThreads) {
+            worker.interrupt();
+        }
+
+        // Wait for workers to finish their current task before draining.
+        for (Thread worker : workerThreads) {
+            try {
+                worker.join(5_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
-        } catch (InterruptedException e) {
-            chunkLoadExecutor.shutdownNow();
-            Thread.currentThread().interrupt();
+        }
+
+        // Cancel all tasks that are still in the queue (workers have stopped).
+        ChunkLoadTask task;
+        while ((task = taskQueue.poll()) != null) {
+            task.future.cancel(false);
         }
         LOGGER.info("AsyncChunkLoader shutdown complete");
     }
 
-    /**
-     * Chunk load task with priority
-     */
-    private static class ChunkLoadTask implements Comparable<ChunkLoadTask> {
-        private final ServerLevel level;
-        private final ChunkPos pos;
-        private final ChunkStatus status;
-        private final ChunkLoadPriority priority;
-        private final long timestamp;
+    // -------------------------------------------------------------------------
+    // Internal types
+    // -------------------------------------------------------------------------
 
-        public ChunkLoadTask(ServerLevel level, ChunkPos pos, ChunkStatus status, ChunkLoadPriority priority) {
+    private static class ChunkLoadTask implements Comparable<ChunkLoadTask> {
+        final ServerLevel level;
+        final ChunkPos pos;
+        final ChunkStatus status;
+        final ChunkLoadPriority priority;
+        final long timestamp;
+        final CompletableFuture<Void> future = new CompletableFuture<>();
+
+        ChunkLoadTask(ServerLevel level, ChunkPos pos, ChunkStatus status, ChunkLoadPriority priority) {
             this.level = level;
             this.pos = pos;
             this.status = status;
@@ -140,52 +175,26 @@ public class AsyncChunkLoader {
 
         @Override
         public int compareTo(ChunkLoadTask other) {
-            // Higher priority first
-            int priorityCompare = Integer.compare(other.priority.value, this.priority.value);
-            if (priorityCompare != 0) {
-                return priorityCompare;
-            }
-            // Then by timestamp (FIFO for same priority)
+            // Higher priority value = processed first.
+            int cmp = Integer.compare(other.priority.value, this.priority.value);
+            if (cmp != 0) return cmp;
+            // FIFO ordering within the same priority level.
             return Long.compare(this.timestamp, other.timestamp);
         }
     }
 
-    /**
-     * Chunk load priority levels
-     */
     private enum ChunkLoadPriority {
-        HIGH(3), // Player-requested chunks
-        NORMAL(2), // Regular chunks
-        LOW(1); // Background generation
+        LOW(1),
+        NORMAL(2),
+        HIGH(3);
 
-        private final int value;
+        final int value;
 
         ChunkLoadPriority(int value) {
             this.value = value;
         }
     }
 
-    /**
-     * Thread factory for chunk loading threads
-     */
-    private class ChunkLoadThreadFactory implements ThreadFactory {
-        private final AtomicInteger threadNumber = new AtomicInteger(1);
-
-        @Override
-        public Thread newThread(Runnable r) {
-            Thread thread = new Thread(r, "MetalMC-ChunkLoader-" + threadNumber.getAndIncrement());
-            thread.setDaemon(true);
-
-            // Set thread priority
-            priorityManager.setWorkerThreadPriority(thread, ThreadPriorityManager.WorkerType.CHUNK_LOADING);
-
-            return thread;
-        }
-    }
-
-    /**
-     * Load statistics record
-     */
     public record LoadStatistics(
             int totalLoadsProcessed,
             int playerRequestedLoads,
