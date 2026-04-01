@@ -55,7 +55,7 @@ Entities far from players are throttled at the AI level, not just skipped entire
 
 Replaces hot-path math calls with cache-friendly alternatives.
 
-- **L1-Optimized Trig Tables:** The standard 65,536-entry sine table (256 KB) is replaced with a 4,096-entry table (16 KB) — fitting entirely in L1 cache and eliminating cache-miss penalties during entity physics and chunk generation.
+- **L1-Optimized Trig Tables:** The standard 65,536-entry sine table (256 KB) is replaced with a 4,096-entry table (16 KB — fits within a typical 32 KB L1 data cache alongside other working data), eliminating cache-miss penalties during entity physics and chunk generation.
 - **Aggressive AI Throttling:** Goal selector scans run every 3 ticks instead of every tick, cutting AI overhead by ~66% with no perceptible behavior difference.
 
 ### ⚙️ `metal.yml` Configuration
@@ -110,11 +110,16 @@ multithreading:
 1. Download the latest `metalmc.jar` from the [**Releases**](https://github.com/Just-Haze/MetalMC/releases) page.
 2. Launch your server:
    ```bash
+   # Linux / macOS
    java -Xms4G -Xmx4G \
      -XX:+UseG1GC \
      -XX:+ParallelRefProcEnabled \
      -XX:MaxGCPauseMillis=200 \
      -jar metalmc.jar --nogui
+   ```
+   ```bat
+   :: Windows
+   java -Xms4G -Xmx4G -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -jar metalmc.jar --nogui
    ```
 3. Accept the EULA in `eula.txt`, then restart.
 4. Tune `metal.yml` to match your hardware.
