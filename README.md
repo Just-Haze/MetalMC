@@ -3,7 +3,7 @@
 > **The High-Performance Minecraft Server Interface**  
 > _A cutting-edge fork of PaperMC, engineered for stability and speed._
 
-![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg) ![Minecraft Version](https://img.shields.io/badge/Minecraft-1.21.10-green.svg)
+![License](https://img.shields.io/badge/License-GPL%20v3-blue.svg) ![Minecraft Version](https://img.shields.io/badge/Minecraft-1.21.11-green.svg)
 
 ---
 
