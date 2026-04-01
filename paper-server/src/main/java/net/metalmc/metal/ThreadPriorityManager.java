@@ -1,8 +1,10 @@
 package net.metalmc.metal;
 
-import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages thread priorities dynamically based on server performance.
@@ -16,10 +18,12 @@ public class ThreadPriorityManager {
     private volatile double currentTPS = 20.0;
     private volatile boolean underLoad = false;
 
+    /** Tracks all registered worker threads and their types for dynamic adjustment. */
+    private final ConcurrentHashMap<Thread, WorkerType> workerThreads = new ConcurrentHashMap<>();
+
     // TPS thresholds
     private static final double TPS_CRITICAL = 15.0;
     private static final double TPS_WARNING = 18.0;
-    private static final double TPS_GOOD = 19.5;
 
     public ThreadPriorityManager(Thread mainThread) {
         this.mainThread = mainThread;
@@ -27,7 +31,7 @@ public class ThreadPriorityManager {
     }
 
     /**
-     * Initialize main thread priority to maximum
+     * Initialize main thread priority to the configured value.
      */
     private void initializeMainThreadPriority() {
         if (MetalConfig.threadPrioritiesEnabled) {
@@ -41,29 +45,35 @@ public class ThreadPriorityManager {
     }
 
     /**
-     * Set priority for a worker thread
+     * Register a worker thread so its priority can be dynamically adjusted.
+     */
+    public void registerWorkerThread(Thread thread, WorkerType type) {
+        workerThreads.put(thread, type);
+    }
+
+    /**
+     * Unregister a worker thread when it terminates.
+     */
+    public void unregisterWorkerThread(Thread thread) {
+        workerThreads.remove(thread);
+    }
+
+    /**
+     * Set the initial priority for a worker thread and register it.
      */
     public void setWorkerThreadPriority(Thread thread, WorkerType type) {
         if (!MetalConfig.threadPrioritiesEnabled) {
             return;
         }
 
-        int priority = switch (type) {
-            case CHUNK_LOADING -> MetalConfig.chunkLoadingPriority;
-            case ENTITY_PROCESSING -> MetalConfig.entityProcessingPriority;
-            case TILE_ENTITY -> Math.max(Thread.MIN_PRIORITY, MetalConfig.entityProcessingPriority - 1);
-            case BACKGROUND -> Math.max(Thread.MIN_PRIORITY, Thread.NORM_PRIORITY - 2);
-        };
-
-        try {
-            thread.setPriority(Math.min(Thread.MAX_PRIORITY, Math.max(Thread.MIN_PRIORITY, priority)));
-        } catch (SecurityException e) {
-            LOGGER.warn("Failed to set {} thread priority: {}", type, e.getMessage());
-        }
+        // Register first so the thread is included in any concurrent priority adjustment.
+        registerWorkerThread(thread, type);
+        int priority = getBasePriority(type);
+        applyPriority(thread, priority);
     }
 
     /**
-     * Update TPS and adjust priorities if dynamic adjustment is enabled
+     * Update TPS and adjust all worker thread priorities if dynamic adjustment is enabled.
      */
     public void updateTPS(double tps) {
         this.currentTPS = tps;
@@ -79,104 +89,91 @@ public class ThreadPriorityManager {
     }
 
     /**
-     * Dynamically adjust worker thread priorities based on server load
+     * Dynamically adjust all registered worker thread priorities based on current load.
      */
     private void adjustPrioritiesForLoad() {
         if (currentTPS < TPS_CRITICAL) {
-            // Critical: Boost main thread, throttle workers
-            LOGGER.info("TPS critical ({} < {}), boosting main thread priority", currentTPS, TPS_CRITICAL);
-            boostMainThread();
-            throttleWorkers();
+            LOGGER.info("TPS critical ({} < {}), boosting main thread and throttling workers",
+                    String.format("%.1f", currentTPS), TPS_CRITICAL);
+            applyPriority(mainThread, Thread.MAX_PRIORITY);
+            for (Map.Entry<Thread, WorkerType> entry : workerThreads.entrySet()) {
+                applyPriority(entry.getKey(), Thread.MIN_PRIORITY);
+            }
         } else if (currentTPS < TPS_WARNING) {
-            // Warning: Slightly reduce worker priorities
-            LOGGER.debug("TPS warning ({} < {}), reducing worker thread priorities", currentTPS, TPS_WARNING);
-            reduceWorkerPriorities();
+            LOGGER.debug("TPS warning ({} < {}), reducing worker priorities",
+                    String.format("%.1f", currentTPS), TPS_WARNING);
+            for (Map.Entry<Thread, WorkerType> entry : workerThreads.entrySet()) {
+                int reduced = Math.max(Thread.MIN_PRIORITY, getBasePriority(entry.getValue()) - 1);
+                applyPriority(entry.getKey(), reduced);
+            }
         } else {
-            // Good: Restore normal priorities
             restoreNormalPriorities();
         }
     }
 
     /**
-     * Boost main thread priority to maximum
-     */
-    private void boostMainThread() {
-        try {
-            mainThread.setPriority(Thread.MAX_PRIORITY);
-        } catch (SecurityException e) {
-            LOGGER.warn("Failed to boost main thread priority: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * Throttle worker threads to minimum priority
-     */
-    private void throttleWorkers() {
-        // Worker threads will be throttled when they check their priority
-        // This is handled in the thread pools
-    }
-
-    /**
-     * Reduce worker thread priorities slightly
-     */
-    private void reduceWorkerPriorities() {
-        // Gradual reduction handled by thread pools
-    }
-
-    /**
-     * Restore normal thread priorities
+     * Restore all threads to their configured base priorities.
      */
     private void restoreNormalPriorities() {
-        try {
-            mainThread.setPriority(MetalConfig.mainThreadPriority);
-        } catch (SecurityException e) {
-            LOGGER.warn("Failed to restore main thread priority: {}", e.getMessage());
+        applyPriority(mainThread, MetalConfig.mainThreadPriority);
+        for (Map.Entry<Thread, WorkerType> entry : workerThreads.entrySet()) {
+            applyPriority(entry.getKey(), getBasePriority(entry.getValue()));
         }
     }
 
     /**
-     * Get current TPS
-     */
-    public double getCurrentTPS() {
-        return currentTPS;
-    }
-
-    /**
-     * Check if server is under load
-     */
-    public boolean isUnderLoad() {
-        return underLoad;
-    }
-
-    /**
-     * Get recommended priority for worker type based on current load
+     * Get the configured base priority for a worker type, clamped to valid JVM range.
      */
     public int getRecommendedPriority(WorkerType type) {
         if (!MetalConfig.threadPrioritiesEnabled) {
             return Thread.NORM_PRIORITY;
         }
 
-        int basePriority = switch (type) {
+        int base = getBasePriority(type);
+        if (underLoad && MetalConfig.dynamicPriorityAdjustment) {
+            if (currentTPS < TPS_CRITICAL) {
+                base = Math.max(Thread.MIN_PRIORITY, base - 2);
+            } else if (currentTPS < TPS_WARNING) {
+                base = Math.max(Thread.MIN_PRIORITY, base - 1);
+            }
+        }
+        return base;
+    }
+
+    private int getBasePriority(WorkerType type) {
+        int priority = switch (type) {
             case CHUNK_LOADING -> MetalConfig.chunkLoadingPriority;
             case ENTITY_PROCESSING -> MetalConfig.entityProcessingPriority;
             case TILE_ENTITY -> Math.max(Thread.MIN_PRIORITY, MetalConfig.entityProcessingPriority - 1);
             case BACKGROUND -> Math.max(Thread.MIN_PRIORITY, Thread.NORM_PRIORITY - 2);
         };
+        return Math.min(Thread.MAX_PRIORITY, Math.max(Thread.MIN_PRIORITY, priority));
+    }
 
-        // Reduce priority if under load
-        if (underLoad && MetalConfig.dynamicPriorityAdjustment) {
-            if (currentTPS < TPS_CRITICAL) {
-                basePriority = Math.max(Thread.MIN_PRIORITY, basePriority - 2);
-            } else if (currentTPS < TPS_WARNING) {
-                basePriority = Math.max(Thread.MIN_PRIORITY, basePriority - 1);
-            }
+    private void applyPriority(Thread thread, int priority) {
+        try {
+            thread.setPriority(Math.min(Thread.MAX_PRIORITY, Math.max(Thread.MIN_PRIORITY, priority)));
+        } catch (SecurityException e) {
+            LOGGER.warn("Failed to set thread priority for {}: {}", thread.getName(), e.getMessage());
         }
-
-        return Math.min(Thread.MAX_PRIORITY, Math.max(Thread.MIN_PRIORITY, basePriority));
     }
 
     /**
-     * Worker thread types
+     * Get current TPS.
+     */
+    public double getCurrentTPS() {
+        return currentTPS;
+    }
+
+    /**
+     * Check if server is under load.
+     */
+    public boolean isUnderLoad() {
+        return underLoad;
+    }
+
+    /**
+     * Worker thread types for priority classification.
      */
     public enum WorkerType {
         CHUNK_LOADING,
