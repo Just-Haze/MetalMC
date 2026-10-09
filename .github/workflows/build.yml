@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, '[ci skip]')"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 25
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: Configure Git
         run: git config --global user.email "no-reply@github.com" && git config --global user.name "Github Actions"
       - name: Apply Patches
@@ -24,10 +24,10 @@ jobs:
       - name: Build
         run: ./gradlew createPaperclipJar --stacktrace
       - name: Smoke test
-        run: scripts/smoke-test.sh metalmc-server/build/libs/metalmc-*.jar
+        run: scripts/smoke-test.sh metalmc-server/build/libs/metalmc-[0-9]*.jar
       - name: Upload server jar
         uses: actions/upload-artifact@v4
         with:
           name: metalmc-server
-          path: metalmc-server/build/libs/metalmc-*.jar
+          path: metalmc-server/build/libs/metalmc-[0-9]*.jar
           if-no-files-found: error
