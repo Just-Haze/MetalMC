@@ -1,0 +1,104 @@
+--- a/paper-server/build.gradle.kts
++++ b/paper-server/build.gradle.kts
+@@ -22,9 +22,17 @@
+     minecraftVersion = providers.gradleProperty("mcVersion")
+     gitFilePatches = false
+ 
+-    updatingMinecraft {
+-        //oldPaperCommit = "e5fe71723e2ffde7cc9fafc085ac3bb73e63175e"
++    // MetalMC start - fork setup
++    val metalmc = forks.register("metalmc") {
++        upstream.patchDir("paperServer") {
++            upstreamPath = "paper-server"
++            excludes = setOf("src/minecraft", "patches", "build.gradle.kts")
++            patchesDir = rootDirectory.dir("metalmc-server/paper-patches")
++            outputDir = rootDirectory.dir("paper-server")
++        }
+     }
++    activeFork = metalmc
++    // MetalMC end - fork setup
+ }
+ 
+ tasks.generateDevelopmentBundle {
+@@ -86,7 +94,21 @@
+     }
+ }
+ 
+-val log4jPlugins = sourceSets.create("log4jPlugins")
++// MetalMC start - fork setup
++sourceSets {
++    main {
++        java { srcDir("../paper-server/src/main/java") }
++        resources { srcDir("../paper-server/src/main/resources") }
++    }
++    test {
++        java { srcDir("../paper-server/src/test/java") }
++        resources { srcDir("../paper-server/src/test/resources") }
++    }
++}
++val log4jPlugins = sourceSets.create("log4jPlugins") {
++    java { srcDir("../paper-server/src/log4jPlugins/java") }
++}
++// MetalMC end - fork setup
+ configurations.named(log4jPlugins.compileClasspathConfigurationName) {
+     extendsFrom(configurations.compileClasspath.get())
+ }
+@@ -109,7 +131,7 @@
+ }
+ 
+ dependencies {
+-    implementation(project(":paper-api"))
++    implementation(project(":metalmc-api")) // MetalMC
+     implementation(platform("ca.spottedleaf.leafpile:bom:1.2.4"))
+     implementation("ca.spottedleaf.leafpile:common")
+     implementation("ca.spottedleaf.leafpile:concurrentutil")
+@@ -173,14 +195,14 @@
+         val gitBranch = git.exec(providers, "rev-parse", "--abbrev-ref", "HEAD").get().trim()
+         attributes(
+             "Main-Class" to "org.bukkit.craftbukkit.Main",
+-            "Implementation-Title" to "Paper",
++            "Implementation-Title" to "MetalMC", // MetalMC
+             "Implementation-Version" to implementationVersion,
+             "Implementation-Vendor" to date,
+-            "Specification-Title" to "Paper",
++            "Specification-Title" to "MetalMC", // MetalMC
+             "Specification-Version" to project.version,
+-            "Specification-Vendor" to "Paper Team",
+-            "Brand-Id" to "papermc:paper",
+-            "Brand-Name" to "Paper",
++            "Specification-Vendor" to "MetalMC Team", // MetalMC
++            "Brand-Id" to "metalmc:metal", // MetalMC
++            "Brand-Name" to "Metal", // MetalMC
+             "Build-Number" to (build ?: ""),
+             "Build-Time" to buildTime.toString(),
+             "Git-Branch" to gitBranch,
+@@ -248,7 +270,7 @@
+     jvmArgumentProviders.add(provider)
+ }
+ 
+-val generatedDir: java.nio.file.Path = layout.projectDirectory.dir("src/generated/java").asFile.toPath()
++val generatedDir: java.nio.file.Path = layout.projectDirectory.dir("../paper-server/src/generated/java").asFile.toPath() // MetalMC
+ idea {
+     module {
+         generatedSourceDirs.add(generatedDir.toFile())
+@@ -329,7 +351,13 @@
+     mainClass.set(null as String?)
+ }
+ 
+-fill {
++// MetalMC start - name the server jar metalmc-<version>.jar
++tasks.createPaperclipJar {
++    outputZip.set(layout.buildDirectory.file("libs/metalmc-${project.version}.jar"))
++}
++// MetalMC end - name the server jar metalmc-<version>.jar
++
++/* fill { // MetalMC - fill publishes to PaperMC's download service, which we don't use
+     project("paper")
+     versionFamily(paperweight.minecraftVersion.map { it.split(".", "-").takeWhile { part -> part.toIntOrNull() != null }.take(2).joinToString(".") })
+     version(paperweight.minecraftVersion)
+@@ -344,4 +372,4 @@
+             }
+         }
+     }
+-}
++} */ // MetalMC - we don't use fill

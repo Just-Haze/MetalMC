@@ -1,51 +1,68 @@
-.gradle/
-build/
+# JVM crash related
+core.*
+hs_err_pid*
 
-# Eclipse stuff
+# Intellij
+/.idea/*
+!/.idea/runConfigurations
+!/.idea/icon.svg
+*.iml
+*.ipr
+*.iws
+out/
+
+# Eclipse
 .classpath
 .project
 .settings/
-
-# VSCode stuff
-.vscode/
 
 # netbeans
 nbproject/
 nbactions.xml
 
-# vim
-.*.sw[a-p]
+# Gradle
+!gradle-wrapper.jar
+.gradle/
+build/
+*/build/
+
+
+# Maven
+log/
+target/
+dependency-reduced-pom.xml
 
 # various other potential build files
+build/
 bin/
 dist/
 manifest.mf
 
-# Mac filesystem dust
+# Mac
 .DS_Store/
 .DS_Store
 
-# intellij
-*.iml
-*.ipr
-*.iws
-.idea/
-out/
-
-# JetBrains Fleet
-.fleet/
+# vim
+.*.sw[a-p]
 
 # Linux temp files
 *~
 
 # other stuff
-run/
-logs/
+/run
 
-!gradle/wrapper/gradle-wrapper.jar
-
+/metalmc-server/build.gradle.kts
+/metalmc-server/src/minecraft
+/paper-server
+/metalmc-api/build.gradle.kts
+/paper-api
+/paper-checkstyle
+/.checkstyle
+/metalmc-checkstyle/build.gradle.kts
+*.jar
+!/gradle/wrapper/gradle-wrapper.jar
 test-plugin.settings.gradle.kts
-paper-generator.settings.gradle.kts
 
-# Don't track patched vanilla submodules
-paper-server/src/minecraft/
+# local test servers
+/run_test
+/metalmc_dist

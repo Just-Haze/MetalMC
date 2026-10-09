@@ -1,0 +1,46 @@
+--- a/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
++++ b/src/main/java/io/papermc/paper/configuration/WorldConfiguration.java
+@@ -412,7 +412,7 @@
+     public class Environment extends ConfigurationPart {
+         public boolean disableThunder = false;
+         public boolean disableIceAndSnow = false;
+-        public boolean optimizeExplosions = false;
++        public boolean optimizeExplosions = true; // MetalMC - Performance defaults
+         public boolean disableExplosionKnockback = false;
+         public boolean generateFlatBedrock = false;
+         public FrostedIce frostedIce;
+@@ -513,16 +513,18 @@
+         public int fixedChunkInhabitedTime = -1;
+         public int minChunkUnloadCount = 50;
+         public double minChunkUnloadFraction = 0.05;
+-        public boolean preventMovingIntoUnloadedChunks = false;
++        public boolean preventMovingIntoUnloadedChunks = true; // MetalMC - Performance defaults
+         public Duration delayChunkUnloadsBy = Duration.of("10s");
+         public Reference2IntMap<EntityType<?>> entityPerChunkSaveLimit = Util.make(new Reference2IntOpenHashMap<>(BuiltInRegistries.ENTITY_TYPE.size()), map -> {
+             map.defaultReturnValue(-1);
+-            map.put(EntityTypes.EXPERIENCE_ORB, -1);
+-            map.put(EntityTypes.SNOWBALL, -1);
+-            map.put(EntityTypes.ENDER_PEARL, -1);
+-            map.put(EntityTypes.ARROW, -1);
+-            map.put(EntityTypes.FIREBALL, -1);
+-            map.put(EntityTypes.SMALL_FIREBALL, -1);
++            // MetalMC start - Performance defaults - cap projectile spam so a single chunk can't stall saving/loading
++            map.put(EntityTypes.EXPERIENCE_ORB, 16);
++            map.put(EntityTypes.SNOWBALL, 8);
++            map.put(EntityTypes.ENDER_PEARL, -1); // unlimited: pearl stasis chambers rely on every pearl being saved
++            map.put(EntityTypes.ARROW, 16);
++            map.put(EntityTypes.FIREBALL, 8);
++            map.put(EntityTypes.SMALL_FIREBALL, 8);
++            // MetalMC end - Performance defaults
+         });
+         public boolean flushRegionsOnSave = false;
+ 
+@@ -579,7 +581,7 @@
+     public class Misc extends ConfigurationPart {
+         public boolean updatePathfindingOnBlockUpdate = true;
+         public boolean showSignClickCommandFailureMsgsToPlayer = false;
+-        public RedstoneImplementation redstoneImplementation = RedstoneImplementation.VANILLA;
++        public RedstoneImplementation redstoneImplementation = RedstoneImplementation.ALTERNATE_CURRENT; // MetalMC - Performance defaults
+         public AlternateCurrentUpdateOrder alternateCurrentUpdateOrder = AlternateCurrentUpdateOrder.HORIZONTAL_FIRST_OUTWARD;
+         public boolean disableEndCredits = false;
+         public DoubleOr.Default maxLeashDistance = DoubleOr.Default.USE_DEFAULT;

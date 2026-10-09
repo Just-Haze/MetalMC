@@ -1,0 +1,16 @@
+--- a/src/main/java/io/papermc/paper/ServerBuildInfo.java
++++ b/src/main/java/io/papermc/paper/ServerBuildInfo.java
+@@ -17,6 +17,13 @@
+      */
+     Key BRAND_PAPER_ID = Key.key("papermc", "paper");
+ 
++    // MetalMC start - Rebrand
++    /**
++     * The brand id for MetalMC.
++     */
++    Key BRAND_METAL_ID = Key.key("metalmc", "metal");
++    // MetalMC end - Rebrand
++
+     /**
+      * Gets the {@code ServerBuildInfo}.
+      *
