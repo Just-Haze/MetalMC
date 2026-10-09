@@ -1,0 +1,53 @@
+name: Release
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create, e.g. v26.3-1 (needs .github/release-notes/<tag>.md)"
+        required: true
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Configure Git
+        run: git config --global user.email "no-reply@github.com" && git config --global user.name "Github Actions"
+      - name: Check release notes
+        run: test -f ".github/release-notes/${RELEASE_TAG}.md" || { echo "::error::Missing .github/release-notes/${RELEASE_TAG}.md"; exit 1; }
+      - name: Apply Patches
+        run: ./gradlew applyAllPatches --stacktrace
+      - name: Build
+        run: ./gradlew createPaperclipJar --stacktrace
+      - name: Smoke test
+        run: scripts/smoke-test.sh metalmc-server/build/libs/metalmc-[0-9]*.jar
+      - name: Prepare release files
+        run: |
+          mc_version="$(grep "^mcVersion=" gradle.properties | cut -d= -f2)"
+          mkdir dist
+          cp metalmc-server/build/libs/metalmc-[0-9]*.jar "dist/metalmc-${mc_version}.jar"
+          cp scripts/start.sh scripts/start.bat dist/
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: MetalMC ${{ env.RELEASE_TAG }}
+          body_path: .github/release-notes/${{ env.RELEASE_TAG }}.md
+          files: dist/*
+          fail_on_unmatched_files: true
