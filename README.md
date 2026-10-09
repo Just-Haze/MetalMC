@@ -49,12 +49,12 @@ To get Paper's behavior back, set the value in `config/paper-world-defaults.yml`
 ## 📥 Installation
 
 1.  **Java:** install **Java 25** or newer.
-2.  **Download:** get `metalmc-<version>.jar` from the latest successful [Build workflow](../../actions/workflows/build.yml) run (artifact `metalmc-server`), or build it yourself (below).
+2.  **Download:** get `metalmc-26.3.jar` (plus `start.sh` / `start.bat`) from the [latest release](../../releases/latest), or build it yourself (below).
 3.  **Run:**
     ```bash
-    MEMORY=6G ./scripts/start.sh metalmc-26.3.local-SNAPSHOT.jar
+    MEMORY=6G ./start.sh metalmc-26.3.jar
     ```
-    `MEMORY` sets the heap size (default `4G`). On Windows, run `set MEMORY=6G` and then `scripts\start.bat`.
+    `MEMORY` sets the heap size (default `4G`). On Windows, run `set MEMORY=6G` and then `start.bat`.
 
 ---
 
@@ -94,6 +94,13 @@ cd MetalMC
 
 1.  Set `paperCommit` in `gradle.properties` to the new Paper commit, and `mcVersion` / `apiVersion` if the Minecraft version changed.
 2.  Run `./gradlew applyAllPatches`. If a MetalMC patch no longer applies, fix it in the generated sources and rebuild the patches as above.
+
+### Publishing a release
+
+1.  Write the release notes in `.github/release-notes/<tag>.md`, for example `v26.3-1.md`.
+2.  Push the tag: `git tag v26.3-1 && git push origin v26.3-1`.
+
+The [Release workflow](.github/workflows/release.yml) builds the jar, boots it once as a smoke test, and publishes a GitHub release. The release includes `metalmc-<mc version>.jar`, the start scripts and SHA-256 checksums.
 
 ---
 

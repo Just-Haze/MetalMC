@@ -23,6 +23,8 @@ jobs:
         run: ./gradlew applyAllPatches --stacktrace
       - name: Build
         run: ./gradlew createPaperclipJar --stacktrace
+      - name: Smoke test
+        run: scripts/smoke-test.sh metalmc-server/build/libs/metalmc-*.jar
       - name: Upload server jar
         uses: actions/upload-artifact@v4
         with:

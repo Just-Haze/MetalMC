@@ -1,0 +1,43 @@
+name: Release
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Configure Git
+        run: git config --global user.email "no-reply@github.com" && git config --global user.name "Github Actions"
+      - name: Check release notes
+        run: test -f ".github/release-notes/${GITHUB_REF_NAME}.md" || { echo "::error::Missing .github/release-notes/${GITHUB_REF_NAME}.md"; exit 1; }
+      - name: Apply Patches
+        run: ./gradlew applyAllPatches --stacktrace
+      - name: Build
+        run: ./gradlew createPaperclipJar --stacktrace
+      - name: Smoke test
+        run: scripts/smoke-test.sh metalmc-server/build/libs/metalmc-*.jar
+      - name: Prepare release files
+        run: |
+          mc_version="$(./gradlew -q printMinecraftVersion)"
+          mkdir dist
+          cp metalmc-server/build/libs/metalmc-*.jar "dist/metalmc-${mc_version}.jar"
+          cp scripts/start.sh scripts/start.bat dist/
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: MetalMC ${{ github.ref_name }}
+          body_path: .github/release-notes/${{ github.ref_name }}.md
+          files: dist/*
+          fail_on_unmatched_files: true
