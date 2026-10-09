@@ -98,7 +98,7 @@ cd MetalMC
 ### Publishing a release
 
 1.  Write the release notes in `.github/release-notes/<tag>.md`, for example `v26.3-1.md`.
-2.  Push the tag: `git tag v26.3-1 && git push origin v26.3-1`.
+2.  Push the tag (`git tag v26.3-1 && git push origin v26.3-1`). Or open **Actions → Release → Run workflow** on GitHub and enter the tag name; the workflow then creates the tag for you.
 
 The [Release workflow](.github/workflows/release.yml) builds the jar, boots it once as a smoke test, and publishes a GitHub release. The release includes `metalmc-<mc version>.jar`, the start scripts and SHA-256 checksums.
 

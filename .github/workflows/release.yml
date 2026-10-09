@@ -3,6 +3,14 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create, e.g. v26.3-1 (needs .github/release-notes/<tag>.md)"
+        required: true
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 permissions:
   contents: write
@@ -20,7 +28,7 @@ jobs:
       - name: Configure Git
         run: git config --global user.email "no-reply@github.com" && git config --global user.name "Github Actions"
       - name: Check release notes
-        run: test -f ".github/release-notes/${GITHUB_REF_NAME}.md" || { echo "::error::Missing .github/release-notes/${GITHUB_REF_NAME}.md"; exit 1; }
+        run: test -f ".github/release-notes/${RELEASE_TAG}.md" || { echo "::error::Missing .github/release-notes/${RELEASE_TAG}.md"; exit 1; }
       - name: Apply Patches
         run: ./gradlew applyAllPatches --stacktrace
       - name: Build
@@ -37,7 +45,9 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          name: MetalMC ${{ github.ref_name }}
-          body_path: .github/release-notes/${{ github.ref_name }}.md
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: MetalMC ${{ env.RELEASE_TAG }}
+          body_path: .github/release-notes/${{ env.RELEASE_TAG }}.md
           files: dist/*
           fail_on_unmatched_files: true
